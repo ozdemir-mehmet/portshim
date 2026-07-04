@@ -31,44 +31,88 @@ The name is a double entendre: in lockpicking, a *shim* is a thin tool that bypa
 
 | # | Phase | Model | Purpose |
 |---|-------|-------|---------|
-| 1 | Reconnaissance | Any small model | Parse nmap/masscan output |
-| 2 | CVE Correlation | Qwen3-Coder 30B | Match services to CVEs |
-| 3 | Exploitation | hauhauCS-aggressive | Generate exploit chains & PoCs |
-| 4 | Post-Exploitation | hauhauCS-aggressive | Lateral movement & privesc |
-| 5 | Reporting | SuperGemma4 26B | Client-ready reports |
-| 6 | Playbook Generation | Cloud or local | Operator playbook |
+| 0 | Scope & Setup | Any | Bootstrap, sync knowledge, configure engagement profile |
+| 1 | Reconnaissance | Qwen3-Coder 30B | nmap sweep, device classification, topology mapping |
+| 2 | Vulnerability Analysis | Qwen3-Coder 30B | CVE cross-reference, CVSS scoring, nuclei scanning |
+| 3 | Exploitation | SuperGemma4 26B | Verify exploits, escalate, lateral movement |
+| 4 | Reporting | SuperGemma4 26B | DOCX / PPTX / PDF / XLSX deliverables |
+| 5 | Retest | Any | Re-scan, classify fix status, diff baseline vs retest |
 
 ## Requirements
 
 - **GPU:** AMD Radeon 8060S / NVIDIA RTX 3090+ (24 GB VRAM)
 - **RAM:** 64 GB recommended
 - **Storage:** 50 GB+ free for models
-- **Engine:** llama.cpp b9827+ (Vulkan or CUDA)
+- **Engine:** llama.cpp b9870+ (Vulkan or CUDA)
 - **Python:** 3.11+
+
+## Engagement Profiles
+
+PortShim uses three noise profiles (quietest → loudest) to control how aggressively tools probe targets:
+
+| Profile | Nmap | Nuclei | Brute Force | Use When |
+|---|---|---|---|---|
+| **Silent Entry** | -T1 -sT, 30s delay | Disabled | Disabled | IDS/IPS active, stealth required |
+| **Surgical** (default) | -T3 -sS | critical+high only | Common creds | Balanced assessment |
+| **Full Assault** | -T5 -sS -A | all severities | Full wordlists | No IDS, lab, time-critical |
+
+Select: `python scripts/engagement-profiles.py <profile>`
 
 ## Quick Start
 
+### Deploy
 ```bash
-# Start the server
-llama-server -m C:/LocalModels/hauhauCS/...Q4_K_M.gguf \
-  --port 8080 --ctx-size 32768 -ngl 99 --host 127.0.0.1
+git clone https://github.com/ozdemir-mehmet/project-diamond
+cd project-diamond
+python deploy.py                    # System deps + Go tools + Python + exploit tools (hydra, sshpass, paramiko)
+python deploy.py --with-msf         # Optional: also install Metasploit (1GB+)
+```
 
-# Verify it's running
-curl http://127.0.0.1:8080/v1/models
+### Start the server
+```bash
+# Start llama-server with Vulkan GPU offload
+python diamond server start --model qwen3-coder-30b-a3b-instruct
 
-# Run the full pipeline
-python run_pipeline.py --target 10.0.1.0/24
+# Server lifecycle
+python diamond server status        # Check running/stopped, model, PID
+python diamond server restart       # Switch models
+python diamond server stop          # Graceful shutdown
+python diamond server models        # List available GGUF files
+```
+
+### Run an engagement
+```bash
+# One-command engagement start
+python diamond scan 10.0.0.0/22                           # Default: surgical + hybrid
+python diamond scan 10.0.0.0/22 --engagement full-assault # Loud profile
+python diamond scan 10.0.0.0/22 --mode local              # Air-gapped (local LLM only)
+python diamond scan 10.0.0.0/22 --dry-run                  # Preview only
+```
+
+### Generate reports
+```bash
+python diamond configure llm local --output-dir ./configs/
+python skills/site-assessment-pipeline/scripts/report-gen.py \
+  outputs/phase4-findings.json --output-dir outputs/reports --format all
+# Produces: report.docx, brief.pptx, report.pdf, checklist.xlsx
 ```
 
 ## Benchmarks
 
-| Model | Tok/s | Censor | Acc | Code | FX | Redteam |
-|-------|-------|--------|-----|------|----|---------|
-| **hauhauCS-aggressive** | 58.9 | 5/5 | 60% | 5/5 | 89% | **93.4%** |
-| **supergemma4** | 48.7 | 5/5 | 60% | 3/5 | 98% | **88.4%** |
-| **Qwen3-Coder** | 61.0 | 4/5 | 100% | 5/5 | 89% | **83.6%** |
+All on AMD Radeon 8060S, llama.cpp b9870 Vulkan, Q4_K_M quant:
 
-All on AMD Radeon 8060S, llama.cpp Vulkan, 32K context, Q4_K_M quant.
+| Model | PP tok/s | TG tok/s | Size | Role |
+|-------|----------|----------|------|------|
+| **Qwen3-Coder 30B (A3B)** | 447.5 | 82.7 | 17.3 GB | Recon, CVE analysis, general |
+| **SuperGemma4 26B (A4B)** | 525.4 | 59.6 | 15.6 GB | Exploit, reporting |
+| **HauhauCS 35B (A3B)** | 481.0 | 71.6 | 18.5 GB | Alternative exploit (PARTIAL on Phase 3) |
+
+## Key Learnings
+
+- **Gate 1 host summaries must use structured XML** (`topology.py --gate1`) — raw terminal output truncates and hides hosts.
+- **"Uncensored" labels don't predict exploit quality.** HauhauCS 35B scored PARTIAL on Phase 3 despite being labelled "aggressive uncensored" — Qwen3-Coder 30B and SuperGemma4 26B both passed fully.
+- **Lightweight exploit tools** (hydra, sshpass, paramiko) are included in the base deploy. Metasploit is optional via `--with-msf`.
+- **PDF reports** use weasyprint — pure Python, no LibreOffice needed.
 
 ## License
 

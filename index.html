@@ -310,32 +310,32 @@
       <div class="feature-card">
         <div class="feature-icon" style="background:#f59e0b15;color:#f59e0b;">⚡</div>
         <h3>6-Phase Pipeline</h3>
-        <p>Reconnaissance through reporting. Each phase has defined gates, so you never skip a step or lose your place.</p>
+        <p>Phase 0 (Scope) through Phase 5 (Retest). Each phase ends with a review gate - APPROVE, RERUN, MODIFY SCOPE, or ABORT.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#06b6d415;color:#06b6d4;">🔌</div>
         <h3>Air-Gapped Operations</h3>
-        <p>Runs entirely on local LLMs via llama.cpp. No internet required. Perfect for sensitive or isolated environments.</p>
+        <p>Runs entirely on local LLMs via llama.cpp with Vulkan GPU offload. Three local models per phase - no internet required.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#10b98115;color:#10b981;">🧩</div>
-        <h3>Per-Phase Model Selection</h3>
-        <p>Phase 1 (Recon) uses a fast model. Phase 3 (Exploit) switches to an uncensored model. Optimise for speed where it matters.</p>
+        <h3>Engagement Profiles</h3>
+        <p>Three noise profiles (Silent Entry, Surgical, Full Assault) control how aggressively tools probe the target. Set once per engagement.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon" style="background:#8b5cf615;color:#8b5cf6;">📜</div>
-        <h3>Operator Guides & Playbooks</h3>
-        <p>Each phase generates structured playbooks with commands, CVEs, exploit chains, and remediation steps for the client.</p>
+        <div class="feature-icon" style="background:#8b5cf615;color:#8b5cf6;">📊</div>
+        <h3>Multi-Format Reports</h3>
+        <p>DOCX (branded), PPTX (6-slide exec brief), PDF (weasyprint), XLSX (severity-coloured checklist) - all from one command.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#ef444415;color:#ef4444;">🛡️</div>
-        <h3>Offensive Security Focus</h3>
-        <p>Built for authorised on-site penetration testing. Uncensored model support ensures no refusal on exploit-specific prompts.</p>
+        <h3>Server Lifecycle</h3>
+        <p>Built-in diamond CLI manages llama-server: start, stop, restart, status, model switching. Auto-starts on scan for local mode.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#f59e0b15;color:#f59e0b;">📊</div>
-        <h3>Benchmarked & Verified</h3>
-        <p>Every model in the stack has been benchmarked across 5 categories: speed, censorship, accuracy, coding, and red-teaming.</p>
+        <h3>Structured Gate Reviews</h3>
+        <p>Gate 1 uses topology.py --gate1 for complete, never-truncated host summaries from XML. No more missing hosts in truncated output.</p>
       </div>
     </div>
   </div>
@@ -349,28 +349,28 @@
     <p class="section-desc">Each phase has a clear goal, a defined model assignment, and a gate condition before moving to the next.</p>
     <div class="steps">
       <div class="step">
+        <div class="step-num">0</div>
+        <div><h4>Scope & Setup</h4><p>Bootstrap environment, sync knowledge bases, configure engagement profile (Silent Entry / Surgical / Full Assault) and LLM mode (local / hybrid / cloud).</p></div>
+      </div>
+      <div class="step">
         <div class="step-num">1</div>
-        <div><h4>Reconnaissance</h4><p>Network scanning results (nmap, masscan) are parsed into structured host tables. Fast, deterministic — uses the smallest model.</p></div>
+        <div><h4>Reconnaissance</h4><p>nmap sweep (all ports, OS detection, service versioning), device classification (40+ roles), topology mapping. Gate 1 uses topology.py --gate1 for complete host summaries from XML.</p></div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div><h4>CVE Correlation</h4><p>Service versions are matched against known CVEs. Produces a prioritised list with CVSS scores and exploit availability.</p></div>
+        <div><h4>Vulnerability Analysis</h4><p>CVE cross-reference via nmap-vulners NSE, nuclei deep-scan, CVSS v3.1 scoring. Prioritised findings list with exploit availability markers.</p></div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div><h4>Exploitation</h4><p>The payload phase. Uses the uncensored model to generate exploit chains, PoC scripts, and operator commands. No refusals.</p></div>
+        <div><h4>Exploitation</h4><p>Hydra brute-force, paramiko SSH automation, manual probe of discovered services (telnet, HTTP, UPnP). SuperGemma4 26B for exploit analysis. Non-destructive escalation only.</p></div>
       </div>
       <div class="step">
         <div class="step-num">4</div>
-        <div><h4>Post-Exploitation</h4><p>Lateral movement, privilege escalation paths, and data enumeration. Maps the full attack chain from breach to domain dominance.</p></div>
+        <div><h4>Reporting</h4><p>Multi-format deliverables from one command: DOCX (branded, Calibri font, A4), PPTX (6-slide exec brief), PDF (weasyprint, A4), XLSX (severity-coloured checklist with dropdowns).</p></div>
       </div>
       <div class="step">
         <div class="step-num">5</div>
-        <div><h4>Reporting</h4><p>Produces professional-grade client reports with CVSS breakdowns, technical descriptions, business impact, and remediation steps.</p></div>
-      </div>
-      <div class="step">
-        <div class="step-num">6</div>
-        <div><h4>Playbook Generation</h4><p>Compiles the entire engagement into an operator playbook: commands ran, findings made, evidence collected, and next steps.</p></div>
+        <div><h4>Retest</h4><p>Rescan after remediation, compare baseline vs retest, auto-classify as FIXED / STILL OPEN / NEW / REGRESSION. Update checklist with retest status.</p></div>
       </div>
     </div>
   </div>
@@ -389,32 +389,32 @@
           <li>AMD Radeon 8060S / NVIDIA RTX 3090+ (24 GB VRAM)</li>
           <li>64 GB RAM recommended</li>
           <li>50 GB+ free disk for models</li>
-          <li>Windows 10+ or Linux</li>
+          <li>Linux (macOS partial, Windows via WSL2)</li>
         </ul>
       </div>
       <div class="req-card">
         <h4>Software</h4>
         <ul>
-          <li>llama.cpp b9827+ (Vulkan or CUDA)</li>
+          <li>llama.cpp b9870+ (Vulkan or CUDA)</li>
           <li>Python 3.11+</li>
-          <li>uv (package manager)</li>
-          <li>hf CLI (for model downloads)</li>
+          <li>nmap, hydra, sshpass (via deploy.py)</li>
+          <li>nuclei, httpx (Go tools, via deploy.py)</li>
         </ul>
       </div>
       <div class="req-card">
         <h4>Models</h4>
         <ul>
-          <li>Qwen3-Coder 30B (Q4_K_M) — coding & accuracy</li>
-          <li>hauhauCS-aggressive (Q4_K_M) — pentesting</li>
-          <li>SuperGemma4 26B (Q4_K_M) — backup</li>
+          <li>Qwen3-Coder 30B (Q4_K_M) — recon & CVE analysis</li>
+          <li>SuperGemma4 26B (Q4_K_M) — exploitation & reports</li>
+          <li>HauhauCS 35B (Q4_K_S) — alternative exploit</li>
         </ul>
       </div>
       <div class="req-card">
         <h4>Network</h4>
         <ul>
-          <li>USB Wi-Fi adapter (e.g. Alfa AWUS036ACH)</li>
-          <li>Monitor mode / packet injection capable</li>
           <li>Target network access (authorised)</li>
+          <li>USB Wi-Fi adapter for wireless testing</li>
+          <li>No internet required for local mode</li>
         </ul>
       </div>
     </div>
@@ -429,46 +429,43 @@
     <p class="section-desc">Start the server, load a model, and run your first scan analysis.</p>
     <div style="background:#0a0a0f;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">
       <div class="qs-tabs">
-        <button class="qs-tab active" data-tab="tab-q4">Q4_K_S (15GB)</button>
-        <button class="qs-tab" data-tab="tab-install">Install</button>
-        <button class="qs-tab" data-tab="tab-run">Run Pipeline</button>
+        <button class="qs-tab active" data-tab="tab-deploy">Deploy</button>
+        <button class="qs-tab" data-tab="tab-server">Server</button>
+        <button class="qs-tab" data-tab="tab-scan">Scan</button>
       </div>
       <div style="padding:24px;">
-        <div class="qs-panel active" id="tab-q4">
-          <pre><code><span style="color:#64748b;"># Kill stale server</span>
-taskkill /T /F /IM "llama-server.exe"
+        <div class="qs-panel active" id="tab-deploy">
+          <pre><code><span style="color:#64748b;"># Clone and bootstrap</span>
+git clone https://github.com/ozdemir-mehmet/project-diamond
+cd project-diamond
+python deploy.py
 
-<span style="color:#64748b;"># Start with chosen model</span>
-llama-server -m C:/LocalModels/hauhauCS/...Q4_K_M.gguf \
-  --port 8080 --ctx-size 32768 -ngl 99 --host 127.0.0.1
-
-<span style="color:#64748b;"># Verify</span>
-curl http://127.0.0.1:8080/v1/models
-
-<span style="color:#64748b;"># Run quick benchmark</span>
-python benchmark_quick.py http://127.0.0.1:8080/v1</code></pre>
+<span style="color:#64748b;"># Optional: exploit framework (1GB+)</span>
+python deploy.py --with-msf</code></pre>
         </div>
-        <div class="qs-panel" id="tab-install">
-          <pre><code><span style="color:#64748b;"># Clone PortShim</span>
-git clone https://github.com/ozdemir-mehmet/portshim
-cd portshim
+        <div class="qs-panel" id="tab-server">
+          <pre><code><span style="color:#64748b;"># Start with Phase 1 model (Qwen3-Coder)</span>
+python diamond server start --model qwen3-coder-30b-a3b-instruct
 
-<span style="color:#64748b;"># Install dependencies</span>
-pip install -r requirements.txt
+<span style="color:#64748b;"># Start with exploit model (SuperGemma4)</span>
+python diamond server start --model supergemma4-26b-uncensored
 
-<span style="color:#64748b;"># Set model directory (optional, defaults to C:/LocalModels)</span>
-export PD_MODELS_DIR=C:/LocalModels</code></pre>
+<span style="color:#64748b;"># Server lifecycle</span>
+python diamond server status
+python diamond server restart --model qwen3-coder-30b-a3b-instruct
+python diamond server models
+python diamond server stop</code></pre>
         </div>
-        <div class="qs-panel" id="tab-run">
-          <pre><code><span style="color:#64748b;"># Run the full pipeline</span>
-python run_pipeline.py --target 10.0.1.0/24
+        <div class="qs-panel" id="tab-scan">
+          <pre><code><span style="color:#64748b;"># One-command engagement</span>
+python diamond scan 10.0.0.0/22
 
-<span style="color:#64748b;"># Or run individual phases</span>
-python run_pipeline.py --phase recon --target 10.0.1.0/24
-python run_pipeline.py --phase exploit --cve CVE-2021-34473
+<span style="color:#64748b;"># Air-gapped mode (local LLM only)</span>
+python diamond scan 10.0.0.0/22 --mode local --engagement full-assault
 
-<span style="color:#64748b;"># Generate report</span>
-python run_pipeline.py --phase report --output ./output/</code></pre>
+<span style="color:#64748b;"># Generate reports</span>
+python skills/site-assessment-pipeline/scripts/report-gen.py \
+  outputs/phase4-findings.json --output-dir outputs/reports --format all</code></pre>
         </div>
       </div>
     </div>
