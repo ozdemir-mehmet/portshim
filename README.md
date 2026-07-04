@@ -122,5 +122,5 @@ Apache 2.0 — use it, modify it, share it. Authorised security testing only.
 
 <p align="center">
   <sub>Built with <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a> · Powered by Vulkan · Backed by benchmarks</sub><br>
-  <sub><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">Cal-Met Corp Industries</a></sub>
+  <sub><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ&autoplay=1">Cal-Met Corp Industries</a></sub>
 </p>
