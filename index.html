@@ -504,7 +504,7 @@ python skills/site-assessment-pipeline/scripts/report-gen.py \
       </div>
       <div class="faq-item">
         <button class="faq-q">How do I benchmark a new model?</button>
-        <div class="faq-a">Download the GGUF file to C:/LocalModels/, start the server, and run <code>python benchmark_quick.py http://127.0.0.1:8080/v1</code> for speed + censorship. For the full suite: <code>python run_benchmarks.py --model "model-name"</code>. See the <code>model-benchmarking-suite</code> reference for details.</div>
+        <div class="faq-a">Download the GGUF file to <code>~/local-models/&lt;model-name&gt;/</code>, start the server, and run <code>python scripts/benchmark-models.py --local-only</code>. See the benchmark reference for details.</div>
       </div>
     </div>
   </div>
