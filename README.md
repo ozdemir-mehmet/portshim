@@ -114,6 +114,15 @@ All on AMD Radeon 8060S, llama.cpp b9870 Vulkan, Q4_K_M quant:
 - **Lightweight exploit tools** (hydra, sshpass, paramiko) are included in the base deploy. Metasploit is optional via `--with-msf`.
 - **PDF reports** use weasyprint — pure Python, no LibreOffice needed.
 
+## Contributing
+
+Pull requests welcome. `main` is protected — all changes require a PR with at least one approval. No direct pushes to `main`.
+
+1. Fork or branch
+2. Open a pull request
+3. Get it reviewed and approved
+4. Merge
+
 ## License
 
 Apache 2.0 — use it, modify it, share it. Authorised security testing only.
