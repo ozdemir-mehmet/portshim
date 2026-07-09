@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Format Reports — PortShim</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f59e0b'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='bold' font-size='16' fill='%23020617'%3EPS%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0f; --bg-alt: #0f172a; --bg-card: #0a0a0f;
+      --text: #e2e8f0; --text-muted: #94a3b8; --text-dim: #64748b; --text-code: #e2e8f0;
+      --border: #1e293b; --border-light: #334155;
+      --accent: #f59e0b; --accent-hover: #fbbf24;
+      --code-bg: #1e293b; --code-block-bg: #0f172a;
+      --nav-bg: rgba(10,10,15,0.85); --nav-border: #1e293b;
+      --selection-bg: rgba(245,158,11,0.2); --selection-text: #fef08a;
+      --btn-secondary-text: #e2e8f0; --btn-secondary-hover: #1e293b;
+      --footer-border: #1e293b; --footer-text: #475569;
+      --toggle-bg: #1e293b; --toggle-hover: #334155;
+      --page-color: #8b5cf6;
+    }
+    [data-theme="light"] {
+      --bg: #ffffff; --bg-alt: #f8fafc; --bg-card: #ffffff;
+      --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-code: #1e293b;
+      --border: #e2e8f0; --border-light: #cbd5e1;
+      --accent: #d97706; --accent-hover: #b45309;
+      --code-bg: #f1f5f9; --code-block-bg: #f8fafc;
+      --nav-bg: rgba(255,255,255,0.9); --nav-border: #e2e8f0;
+      --selection-bg: rgba(217,119,6,0.2); --selection-text: #78350f;
+      --btn-secondary-text: #0f172a; --btn-secondary-hover: #e2e8f0;
+      --footer-border: #e2e8f0; --footer-text: #94a3b8;
+      --toggle-bg: #e2e8f0; --toggle-hover: #cbd5e1;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden;
+      transition: background .25s, color .25s;
+    }
+    ::selection { background: var(--selection-bg); color: var(--selection-text); }
+    h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); }
+    h2 { font-size: clamp(1.3rem, 2.5vw, 1.8rem); margin-top: 40px; margin-bottom: 12px; color: var(--page-color); }
+    h3 { font-size: 1.15rem; margin-top: 28px; margin-bottom: 8px; }
+    p { color: var(--text-muted); margin-bottom: 16px; }
+    a { color: var(--accent); text-decoration: none; transition: color .2s; }
+    a:hover { color: var(--accent-hover); }
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--code-bg); color: var(--text-code); padding: 2px 6px;
+      border-radius: 4px; font-size: .85em;
+    }
+    pre code {
+      display: block; padding: 1rem 1.2rem; border-radius: 8px;
+      background: var(--code-block-bg); border: 1px solid var(--border);
+      overflow-x: auto; font-size: .82rem; line-height: 1.5;
+    }
+    ul, ol { color: var(--text-muted); margin-bottom: 16px; padding-left: 24px; }
+    li { margin-bottom: 6px; }
+    .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: var(--nav-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background .25s, border-color .25s;
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 60px;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Courier New', monospace; font-weight: 700; font-size: 1.1rem;
+      color: var(--accent);
+    }
+    .nav-back { font-size: .85rem; color: var(--text-muted); }
+    .nav-back:hover { color: var(--accent); }
+
+    .page-hero {
+      padding: 120px 0 60px; text-align: center;
+      background: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(139,92,246,0.08) 0%, transparent 70%);
+    }
+    .page-hero .icon { font-size: 3rem; margin-bottom: 16px; }
+    .page-hero h1 { margin-bottom: 12px; }
+    .page-hero p { font-size: 1.1rem; max-width: 640px; margin: 0 auto; }
+
+    .page-content { padding: 40px 0 80px; }
+
+    .theme-toggle {
+      width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--toggle-bg); color: var(--text);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; transition: all .2s; padding: 0;
+    }
+    .theme-toggle:hover { background: var(--toggle-hover); }
+    /* ── Report Preview Gallery ── */
+    .report-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 24px; margin: 32px 0 48px; }
+    .report-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+      overflow: hidden; transition: all .25s;
+    }
+    .report-card:hover { border-color: var(--accent); box-shadow: 0 8px 32px rgba(0,0,0,.15); transform: translateY(-2px); }
+    .report-card-image {
+      border-bottom: 1px solid var(--border); line-height: 0; overflow: hidden;
+      background: var(--bg-alt);
+    }
+    .report-card-image img { width: 100%; height: auto; display: block; }
+    .report-card-body { padding: 18px 20px 20px; }
+    .report-card-body h4 { margin-bottom: 4px; }
+    .report-card-body p { font-size: .85rem; margin: 0; }
+    .report-card-badge {
+      display: inline-block; font-size: .68rem; font-weight: 600;
+      padding: 2px 10px; border-radius: 4px; margin-bottom: 10px;
+      letter-spacing: .5px; text-transform: uppercase;
+    }
+    .badge-docx { background: #1b5e9e22; color: #1b5e9e; }
+    .badge-pptx { background: #cf4a3722; color: #cf4a37; }
+    .badge-pdf  { background: #b30b0022; color: #b30b00; }
+    .badge-xlsx { background: #21734622; color: #217346; }
+    [data-theme="light"] .badge-docx { background: #1b5e9e11; }
+    [data-theme="light"] .badge-pptx { background: #cf4a3711; }
+    [data-theme="light"] .badge-pdf  { background: #b30b0011; }
+    [data-theme="light"] .badge-xlsx { background: #21734611; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--footer-border); padding: 40px 0; text-align: center;
+    }
+    footer p { font-size: .82rem; color: var(--footer-text); }
+    .footer-links { display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; }
+    .footer-links a { font-size: .85rem; color: var(--text-muted); }
+    .footer-links a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <div class="nav-brand">⬡ PortShim</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <a href="../index.html" class="nav-back">← Back to Home</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+    </div>
+  </div>
+</nav>
+
+<section class="page-hero">
+  <div class="container">
+    <div class="icon">📊</div>
+    <h1>Multi-Format Reports</h1>
+    <p>Four report formats from one command — DOCX, PPTX, PDF, and XLSX — all with consistent branding and severity colouring.</p>
+  </div>
+</section>
+
+<section class="page-content">
+  <div class="container">
+    
+<h2>Overview</h2>
+<p>PortShim generates every deliverable you need from a single command. Findings are rendered with consistent severity colouring, branding, and structured formatting across all formats. No manual copy-paste between tools.</p>
+
+<h2>DOCX — Full Report</h2>
+<p>Branded A4 document suitable for client delivery:</p>
+<ul>
+  <li>Cover page with engagement title, date, and classification</li>
+  <li>Auto-generated table of contents</li>
+  <li>Executive summary with key metrics (hosts scanned, vulnerabilities found, criticals resolved)</li>
+  <li>Per-finding sections with CVSS score, vector, description, evidence, and remediation steps</li>
+  <li>Calibri font, consistent heading styles, severity-coloured finding badges</li>
+</ul>
+<p><strong>Command:</strong> <code>python scripts/report-gen.py --format docx</code></p>
+
+<h2>PPTX — Executive Brief</h2>
+<p>Six-slide deck for stakeholder presentations:</p>
+<ol>
+  <li><strong>Title slide</strong> — Engagement name, date, classification</li>
+  <li><strong>Executive summary</strong> — Key metrics and overall risk posture</li>
+  <li><strong>Finding overview</strong> — Severity breakdown chart (critical/high/medium/low)</li>
+  <li><strong>Top findings</strong> — Three most critical vulnerabilities with impact</li>
+  <li><strong>Remediation roadmap</strong> — Prioritised fix timeline</li>
+  <li><strong>Next steps</strong> — Retest schedule and recommendations</li>
+</ol>
+<p><strong>Command:</strong> <code>python scripts/report-gen.py --format pptx</code></p>
+
+<h2>PDF — Print-Ready</h2>
+<p>WeasyPrint-rendered A4 PDF with:</p>
+<ul>
+  <li>Inline severity badges (critical=#ef4444, high=#f59e0b, medium=#06b6d4, low=#10b981)</li>
+  <li>Cover page and table of contents</li>
+  <li>Page numbers and running headers</li>
+  <li>Hyperlinked cross-references</li>
+</ul>
+<p><strong>Command:</strong> <code>python scripts/report-gen.py --format pdf</code></p>
+
+<h2>XLSX — Remediation Checklist</h2>
+<p>Spreadsheet for tracking remediation progress:</p>
+<ul>
+  <li>Auto-coloured severity column (red/amber/blue/green)</li>
+  <li>Dropdown filters per column</li>
+  <li>Status column: Open / In Progress / Verified / Accepted Risk</li>
+  <li>Retest results column for Phase 5</li>
+  <li>Printable with frozen header row and print area set</li>
+</ul>
+<p><strong>Command:</strong> <code>python scripts/excel-checklist.py</code></p>
+
+<h2>Consistent Colour Scheme</h2>
+<p>All formats use the same severity palette:</p>
+<ul>
+  <li><strong style="color:#ef4444;">Critical</strong> — #ef4444 (red)</li>
+  <li><strong style="color:#f59e0b;">High</strong> — #f59e0b (amber)</li>
+  <li><strong style="color:#06b6d4;">Medium</strong> — #06b6d4 (cyan)</li>
+  <li><strong style="color:#10b981;">Low</strong> — #10b981 (green)</li>
+  <li><strong style="color:#64748b;">Info</strong> — #64748b (slate)</li>
+</ul>
+
+<h2>Sample Reports</h2>
+<p>Preview of each report format generated from a de-identified assessment of a 10.0.0.0/24 network with 14 findings. Full samples are available in the <code>outputs/reports/</code> directory after running any engagement.</p>
+
+<div class="report-gallery">
+  <div class="report-card">
+    <div class="report-card-image">
+      <img src="../images/reports/sample-docx-cover.png" alt="DOCX report cover page" loading="lazy">
+    </div>
+    <div class="report-card-body">
+      <span class="report-card-badge badge-docx">DOCX</span>
+      <h4>Full Technical Report</h4>
+      <p>Branded A4 document with cover page, executive summary, risk posture, findings table, and per-finding detail sections with CVSS scores and remediation.</p>
+    </div>
+  </div>
+
+  <div class="report-card">
+    <div class="report-card-image">
+      <img src="../images/reports/sample-pdf-content.png" alt="PDF report findings table" loading="lazy">
+    </div>
+    <div class="report-card-body">
+      <span class="report-card-badge badge-pdf">PDF</span>
+      <h4>Print-Ready Report</h4>
+      <p>WeasyPrint-rendered A4 PDF with cover, table of contents, severity-coloured findings, CVSS vectors, CVE links, and hyperlinked cross-references.</p>
+    </div>
+  </div>
+
+  <div class="report-card">
+    <div class="report-card-image">
+      <img src="../images/reports/sample-pptx-slide2.png" alt="PPTX executive brief slide" loading="lazy">
+    </div>
+    <div class="report-card-body">
+      <span class="report-card-badge badge-pptx">PPTX</span>
+      <h4>Executive Brief</h4>
+      <p>Six-slide widescreen deck with title, assessment overview, risk posture bars, key risks with severity tags, remediation roadmap, and next steps.</p>
+    </div>
+  </div>
+</div>
+
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="../index.html">Home</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#quickstart">Quick Start</a>
+      <a href="../index.html#faq">FAQ</a>
+    </div>
+    <p>PortShim v0.2.8 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
+  </div>
+</footer>
+
+<script>
+  (function() {
+    const toggle = document.getElementById('themeToggle');
+    const KEY = 'portshim-theme';
+    function setTheme(t) {
+      document.documentElement.setAttribute('data-theme', t);
+      toggle.textContent = t === 'dark' ? '🌙' : '☀️';
+      try { localStorage.setItem(KEY, t); } catch {}
+    }
+    const saved = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
+    if (saved) { setTheme(saved); }
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) { setTheme('light'); }
+    else { setTheme('dark'); }
+    toggle.addEventListener('click', () => {
+      const c = document.documentElement.getAttribute('data-theme');
+      setTheme(c === 'light' ? 'dark' : 'light');
+    });
+  })();
+</script>
+</body>
+</html>

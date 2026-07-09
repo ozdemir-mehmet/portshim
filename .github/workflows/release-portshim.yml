@@ -1,0 +1,51 @@
+name: Release to Public PortShim
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Save landing page
+        run: cp -r portshim-landing /tmp/portshim-landing
+
+      - name: Strip internal files
+        shell: bash
+        run: |
+          while IFS= read -r pattern; do
+            # Strip inline comments and trim whitespace
+            pattern="${pattern%%#*}"
+            pattern="${pattern//[[:space:]]/}"
+            [[ -z "${pattern}" ]] && continue
+            # Expand globs and remove
+            if ls ${pattern} >/dev/null 2>&1; then
+              rm -rf ${pattern}
+              echo "  Stripped: ${pattern}"
+            fi
+          done < .release-filter
+
+      - name: Merge landing page
+        run: cp -r /tmp/portshim-landing/. .
+
+      - name: Push to public repo
+        env:
+          SSH_KEY: ${{ secrets.PORTSHIM_PUBLIC_DEPLOY_KEY }}
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_ed25519
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          # Start fresh — remove checkout's .git, init clean
+          rm -rf .git
+          git init --initial-branch=main
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git add -A
+          git commit -m "PortShim ${{ github.ref_name }}"
+          git remote add origin git@github.com:ozdemir-mehmet/portshim.git
+          git push origin main --force

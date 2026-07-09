@@ -1,0 +1,875 @@
+#!/usr/bin/env python3
+"""
+PortShim CLI Wrapper — one-command engagement start + server lifecycle.
+
+Usage:
+    portshim scan 10.0.0.0/22                          # Default: surgical + hybrid
+    portshim scan 10.0.0.0/22 --engagement silent-entry   # Quiet mode
+    portshim scan 10.0.0.0/22 --dry-run                 # Preview only
+    portshim server start [--model <id>]                 # Start llama-server
+    portshim server stop                                # Stop llama-server
+    portshim server status                              # Check server status
+    portshim server restart [--model <id>]              # Restart with model
+    portshim server models                              # List available models
+
+    portshim wireless scan                             # Discover nearby APs
+    portshim wireless scan --duration 30 --band 5       # 30s, 5 GHz only
+    portshim wireless select                           # Pick APs to assess
+    portshim wireless assess                           # Test selected APs
+    portshim wireless capture                          # Capture WPA handshakes
+    portshim wireless crack --cap <file>               # Crack WPA handshakes
+    portshim wireless deauth                           # Deauthenticate clients
+
+    portshim --help                                    # Show all commands
+
+Environment:
+    PD_MODELS_DIR    Path to .gguf model files (default: ~/local-models)
+"""
+
+import argparse, json, os, signal, subprocess, sys, textwrap, time
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SCRIPTS = PROJECT_ROOT / "scripts"
+SKILL_SCRIPTS = PROJECT_ROOT / "skills" / "site-assessment-pipeline" / "scripts"
+PID_FILE = Path(os.path.expanduser("~/.hermes")) / "llama-server.pid"
+
+# ── Model registry (mirrors llm-config.py) ──
+MODEL_IDS = {
+    "qwen3-coder-30b-a3b-instruct": {
+        "path": "qwen3-coder-30b-a3b-instruct",
+        "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+    },
+    "supergemma4-26b-uncensored": {
+        "path": "supergemma4-26b-uncensored",
+        "file": "supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf",
+    },
+    "hauhau-cs-35b-uncensored": {
+        "path": "hauhau-cs-35b",
+        "file": "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_S.gguf",
+    },
+}
+
+# Per-phase default models (from benchmark recommendations)
+PHASE_DEFAULTS = {
+    "recon": "qwen3-coder-30b-a3b-instruct",
+    "vuln": "qwen3-coder-30b-a3b-instruct",
+    "exploit": "supergemma4-26b-uncensored",
+    "report": "supergemma4-26b-uncensored",
+}
+
+# ── Colour helpers ──
+RED = "\033[91m"
+GREEN = "\033[92m"
+CYAN = "\033[96m"
+YELLOW = "\033[93m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+
+def status(msg, ok=True):
+    symbol = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+    print(f"  {symbol} {msg}")
+
+
+def header(msg):
+    print(f"\n{BOLD}{CYAN}═══ {msg} {RESET}{'═' * (60 - len(msg))}")
+
+
+def warn(msg):
+    print(f"  {YELLOW}⚠ {msg}{RESET}")
+
+
+def _models_dir():
+    """Resolve the models directory."""
+    env = os.environ.get("PD_MODELS_DIR")
+    if env:
+        return Path(env)
+    return Path.home() / "local-models"
+
+
+def _model_path(model_id):
+    """Resolve full GGUF path for a model ID. Returns None if not found."""
+    info = MODEL_IDS.get(model_id)
+    if not info:
+        return None
+    path = _models_dir() / info["path"] / info["file"]
+    return path if path.exists() else None
+
+
+def _find_llama_server():
+    """Locate llama-server binary."""
+    # Check PATH first
+    for bin_path in ["llama-server"]:
+        r = subprocess.run(["which", bin_path], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    # Check common locations
+    for candidate in [
+        Path.home() / ".local" / "bin" / "llama-server",
+        Path("/usr/local/bin/llama-server"),
+        Path("/usr/bin/llama-server"),
+    ]:
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+# ── Server lifecycle ──
+
+def server_running():
+    """Check if a llama-server process is running (by PID file)."""
+    if not PID_FILE.exists():
+        return False
+    try:
+        pid = int(PID_FILE.read_text().strip().split()[0])
+        os.kill(pid, 0)  # Check if alive
+        return True
+    except (OSError, ValueError, IndexError):
+        PID_FILE.unlink(missing_ok=True)
+        return False
+
+
+def server_get_model():
+    """Get the model ID the running server is serving (from PID file)."""
+    if not PID_FILE.exists():
+        return None
+    try:
+        parts = PID_FILE.read_text().strip().split(maxsplit=1)
+        if len(parts) > 1:
+            return parts[1]
+        return None
+    except OSError:
+        return None
+
+
+def server_stop():
+    """Stop the running llama-server."""
+    header("Server Stop")
+    if not PID_FILE.exists():
+        warn("No server PID file found. Nothing to stop.")
+        return True
+
+    try:
+        pid = int(PID_FILE.read_text().strip().split()[0])
+        os.kill(pid, signal.SIGTERM)
+
+        # Wait up to 5 seconds for graceful shutdown
+        for _ in range(10):
+            try:
+                os.kill(pid, 0)
+                time.sleep(0.5)
+            except OSError:
+                break
+        else:
+            # Force kill
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+        PID_FILE.unlink(missing_ok=True)
+        status(f"Server stopped (PID {pid})", True)
+        return True
+    except (OSError, ValueError, IndexError) as e:
+        warn(f"Could not stop server: {e}")
+        PID_FILE.unlink(missing_ok=True)
+        return False
+
+
+def server_start(model_id=None, port=8080, host="127.0.0.1", ngl=-1):
+    """Start llama-server with the specified model."""
+    header("Server Start")
+
+    # If already running, offer restart
+    if server_running():
+        current = server_get_model()
+        warn(f"Server already running (model: {current or 'unknown'})")
+        print(f"  Use '{BOLD}portshim server restart{RESET}' to switch models")
+        return False
+
+    # Resolve model
+    if not model_id:
+        model_id = PHASE_DEFAULTS["recon"]
+        warn(f"No model specified. Using default for Phase 1: {model_id}")
+
+    gguf_path = _model_path(model_id)
+    if not gguf_path:
+        available = [m for m in MODEL_IDS if _model_path(m)]
+        print(f"  {RED}Model '{model_id}' not found in:{RESET}")
+        print(f"    {_models_dir()}")
+        print(f"\n  Available models:")
+        for m in available:
+            p = _model_path(m)
+            print(f"    • {m}  ({p.parent.name}/{p.name})")
+        print(f"\n  Tip: Set {BOLD}PD_MODELS_DIR{RESET} if models are elsewhere")
+        return False
+
+    llama_bin = _find_llama_server()
+    if not llama_bin:
+        print(f"  {RED}llama-server not found in PATH or common locations.{RESET}")
+        print(f"  Install via: pacman -S llama.cpp, or build from source.")
+        return False
+
+    size_gb = gguf_path.stat().st_size / (1024**3)
+    print(f"  Model:   {model_id}")
+    print(f"  File:    {gguf_path}")
+    print(f"  Size:    {size_gb:.1f} GiB")
+    print(f"  Port:    {host}:{port}")
+    print(f"  GPU:     {'Vulkan (all layers)' if ngl < 0 else f'{ngl} layers'}")
+    print()
+
+    cmd = [
+        llama_bin,
+        "-m", str(gguf_path),
+        "--host", host,
+        "--port", str(port),
+        "-ngl", str(ngl),
+        "-c", "16384",  # Context size
+        "--no-warmup",  # Skip warmup for faster start
+    ]
+
+    log_path = PROJECT_ROOT / "logs" / "llama-server.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=open(log_path, "w"),
+            stderr=subprocess.STDOUT,
+            preexec_fn=os.setsid,  # Process group for clean kill
+        )
+    except FileNotFoundError:
+        print(f"  {RED}Failed to execute: {llama_bin}{RESET}")
+        return False
+
+    # Write PID + model info
+    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(f"{proc.pid} {model_id}\n")
+
+    # Wait for server to be ready (check health endpoint)
+    print(f"  Waiting for server to start... ", end="", flush=True)
+    for _ in range(30):  # 30 seconds max
+        time.sleep(1)
+        try:
+            r = subprocess.run(
+                ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                 f"http://{host}:{port}/health"],
+                capture_output=True, text=True, timeout=3,
+            )
+            if r.stdout.strip() == "200":
+                print(f"{GREEN}ready{RESET}")
+                status(f"Server started (PID {proc.pid})", True)
+                status(f"Endpoint: http://{host}:{port}/v1", True)
+                status(f"Logs: {log_path}", True)
+                return True
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        print(".", end="", flush=True)
+
+    print(f"\n  {YELLOW}Server process started but health check timed out.{RESET}")
+    status(f"Check logs: {log_path}", False)
+    return True
+
+
+# ── Scan flow ──
+
+def run(cmd, check=True):
+    """Run a command, return success."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def check_prerequisites():
+    """Verify the environment is ready."""
+    header("Prerequisites")
+    all_ok = True
+
+    # Python deps
+    for module in ["docx", "openpyxl"]:
+        try:
+            __import__(module)
+            status(f"Python: {module}", True)
+        except ImportError:
+            status(f"Python: {module} (missing — run: pip install python-docx openpyxl)", False)
+            all_ok = False
+
+    # Tools (loose check — deploy.py should have installed these)
+    tools = {
+        "nmap": "nmap --version",
+        "nuclei": "nuclei -version",
+        "httpx": "httpx -version",
+    }
+    for tool, check_cmd in tools.items():
+        ok = run(check_cmd.split(), check=False)
+        status(f"Tool: {tool}", ok)
+        if not ok:
+            all_ok = False
+
+    # Hermes
+    ok = run(["hermes", "--version"], check=False)
+    status("Hermes Agent", ok)
+    if not ok:
+        all_ok = False
+
+    # Project scripts
+    for script, path in [
+        ("sync_knowledge.py", SCRIPTS / "sync_knowledge.py"),
+        ("check-skill-freshness.py", SCRIPTS / "check-skill-freshness.py"),
+        ("engagement-profiles.py", SKILL_SCRIPTS / "engagement-profiles.py"),
+        ("llm-config.py", SKILL_SCRIPTS / "llm-config.py"),
+    ]:
+        ok = path.exists()
+        status(f"Script: {script}", ok)
+        if not ok:
+            all_ok = False
+
+    # llama.cpp
+    llama_bin = _find_llama_server()
+    status(f"Tool: llama-server ({llama_bin or 'not found'})", bool(llama_bin))
+    if not llama_bin:
+        all_ok = False
+
+    return all_ok
+
+
+def sync_knowledge():
+    """Pull latest from tracked repos."""
+    header("Sync Knowledge")
+    print("  Pulling latest CVE data, exploit signatures, and skill updates...")
+    ok = run([sys.executable, str(SCRIPTS / "sync_knowledge.py"), "--all"])
+    status("Knowledge synced", ok)
+    return ok
+
+
+def check_freshness():
+    """Check if tracked repos are stale."""
+    header("Freshness Check")
+    script = SCRIPTS / "check-skill-freshness.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True,
+    )
+    stale = "stale" in result.stdout.lower() or "STALE" in result.stdout
+    if result.returncode != 0:
+        status("Freshness check failed — continuing anyway", False)
+        return True  # Non-blocking
+    if stale:
+        status("Some tracked repos are stale (>30 days). Consider updating.", False)
+    else:
+        status("All tracked repos current", True)
+    return True
+
+
+def configure_engagement(profile="surgical"):
+    """Set the engagement noise profile (quietest → loudest)."""
+    header("Engagement Profile")
+    valid = ["silent-entry", "surgical", "full-assault"]
+    if profile not in valid:
+        print(f"  {RED}Invalid profile: {profile}. Must be one of: {', '.join(valid)}{RESET}")
+        return False
+    ok = run([sys.executable, str(SKILL_SCRIPTS / "engagement-profiles.py"), profile])
+    if ok:
+        label = {
+            "silent-entry": "Silent Entry (IDS-aware)",
+            "surgical": "Surgical (balanced)",
+            "full-assault": "Full Assault (maximum speed)",
+        }
+        status(label.get(profile, profile), True)
+    else:
+        status(f"Failed to set {profile}", False)
+    return ok
+
+
+def configure_llm(mode="hybrid", models_dir=None):
+    """Configure LLM deployment mode."""
+    header("LLM Configuration")
+    valid = ["local", "hybrid", "cloud"]
+    if mode not in valid:
+        print(f"  {RED}Invalid mode: {mode}. Must be one of: {', '.join(valid)}{RESET}")
+        return False
+
+    label = {
+        "local": "Fully Local (air-gap)",
+        "hybrid": "Hybrid (local exploit, cloud report)",
+        "cloud": "Fully Cloud (API)",
+    }
+
+    # Set models dir env if provided
+    env = os.environ.copy()
+    if models_dir:
+        env["PD_MODELS_DIR"] = models_dir
+        status(f"Models directory: {models_dir}", True)
+    else:
+        default_models = os.environ.get(
+            "PD_MODELS_DIR", os.path.join(os.path.expanduser("~"), "local-models")
+        )
+        status(f"Models directory: {default_models} (default)", True)
+
+    ok = run(
+        [sys.executable, str(SKILL_SCRIPTS / "llm-config.py"), mode, "--output-dir", str(PROJECT_ROOT / "configs")]
+    )
+    if ok:
+        status(label.get(mode, mode), True)
+    else:
+        status(f"Failed to configure {mode}", False)
+    return ok
+
+
+def show_hermes_instructions(target, engagement, mode, wireless):
+    """Print the commands the operator should run in Hermes."""
+    header("Ready to Start")
+    print(f"  {BOLD}Target:{RESET}     {GREEN}{target}{RESET}")
+    print(f"  {BOLD}Profile:{RESET}    {engagement}")
+    print(f"  {BOLD}LLM Mode:{RESET}   {mode}")
+    print(f"  {BOLD}Wireless:{RESET}   {'In scope' if wireless else 'Not in scope'}")
+    print(f"\n  {BOLD}Next step — in Hermes:{RESET}")
+    print(f"  {CYAN}/skill site-assessment-pipeline{RESET}")
+    print(f"\n  Then tell Hermes your target:")
+    print(
+        f"  {YELLOW}Start Phase 0. Target is {target}. "
+        f"Engagement profile: {engagement}. "
+        f"Wireless {'is' if wireless else 'is not'} in scope. Use the current config.{RESET}"
+    )
+    print()
+
+
+# ── Server subcommand handlers ──
+
+def cmd_server_start(args):
+    server_start(
+        model_id=args.model,
+        port=args.port,
+        host=args.host,
+        ngl=-1 if args.offload_all else args.ngl,
+    )
+
+
+def cmd_server_stop(args=None):
+    return server_stop()
+
+
+def cmd_server_restart(args):
+    server_stop()
+    print()
+    server_start(
+        model_id=args.model,
+        port=args.port,
+        host=args.host,
+        ngl=-1 if args.offload_all else args.ngl,
+    )
+
+
+def cmd_server_status(args=None):
+    header("Server Status")
+    if server_running():
+        model = server_get_model()
+        print(f"  {GREEN}● Running{RESET}")
+        print(f"  Model: {model or 'unknown'}")
+        print(f"  PID:   {PID_FILE.read_text().strip().split()[0]}")
+        print(f"  Port:  127.0.0.1:8080")
+    else:
+        print(f"  ○ Stopped")
+    return True
+
+
+def cmd_server_models(args=None):
+    header("Available Models")
+    any_found = False
+    for mid, info in MODEL_IDS.items():
+        gguf_path = _models_dir() / info["path"] / info["file"]
+        if gguf_path.exists():
+            size = gguf_path.stat().st_size / (1024**3)
+            print(f"  {GREEN}✔{RESET} {mid}")
+            print(f"      {gguf_path.name}  ({size:.1f} GiB)")
+            any_found = True
+        else:
+            print(f"  {YELLOW}✗{RESET} {mid}")
+            print(f"      NOT FOUND at {gguf_path}")
+    if not any_found:
+        print(f"  {YELLOW}No models found. Set PD_MODELS_DIR or download models.{RESET}")
+    return True
+
+
+# ── Main ──
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="PortShim — one-command engagement start",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""\
+            Examples:
+              portshim scan 10.0.0.0/22
+              portshim scan 10.0.0.0/22 --stealth silent-entry --mode local
+              portshim scan 10.0.0.0/22 --dry-run
+              portshim scan 10.0.0.0/22 --no-freshness-check
+
+              portshim wireless scan
+              portshim wireless scan --duration 30 --band 5
+              portshim wireless select
+              portshim wireless assess
+              portshim wireless capture
+              portshim wireless crack --cap <file>
+              portshim wireless deauth
+
+              portshim server start --model qwen3-coder-30b-a3b-instruct
+              portshim server start --model supergemma4-26b-uncensored
+              portshim server stop
+              portshim server status
+              portshim server models
+        """),
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # ── scan ──
+    scan = subparsers.add_parser("scan", help="Start a new engagement")
+    scan.add_argument("target", help="Target IP range (CIDR, e.g. 10.0.0.0/22)")
+    scan.add_argument(
+        "--engagement",
+        default="surgical",
+        choices=["silent-entry", "surgical", "full-assault"],
+        help="Engagement profile (quietest→loudest). Default: surgical",
+    )
+    scan.add_argument(
+        "--mode",
+        default="hybrid",
+        choices=["local", "hybrid", "cloud"],
+        help="LLM deployment mode (default: hybrid)",
+    )
+    scan.add_argument(
+        "--no-freshness-check", action="store_true", help="Skip repository freshness check"
+    )
+    scan.add_argument(
+        "--models-dir",
+        default=os.environ.get("PD_MODELS_DIR"),
+        help="Path to .gguf model files (env: PD_MODELS_DIR)",
+    )
+    scan.add_argument(
+        "--dry-run", action="store_true", help="Preview without executing"
+    )
+    scan.add_argument(
+        "--no-server", action="store_true",
+        help="Don't auto-start llama-server (for local/hybrid modes)",
+    )
+    scan.add_argument(
+        "--wireless", action="store_true",
+        help=argparse.SUPPRESS,  # Hidden — deprecated
+    )
+
+    # ── wireless ──
+    wireless = subparsers.add_parser("wireless", help="Wireless RF assessment")
+    wireless_sub = wireless.add_subparsers(dest="wireless_action")
+
+    w_scan = wireless_sub.add_parser("scan", help="Discover nearby access points")
+    w_scan.add_argument("--duration", type=int, default=15,
+                        help="Scan duration in seconds (default: 15)")
+    w_scan.add_argument("--band", choices=["2.4", "5", "both"], default="both",
+                        help="Frequency band (default: both)")
+    w_scan.add_argument("--interface", default=None,
+                        help="Wireless interface (auto-detect if not specified)")
+    w_scan.add_argument("--dry-run", action="store_true",
+                        help="Detect hardware without scanning")
+    w_scan.add_argument("--force", action="store_true",
+                        help="Skip interactive prompts (agent-friendly)")
+    w_scan.add_argument("--models-dir",
+                        default=os.environ.get("PD_MODELS_DIR"),
+                        help=argparse.SUPPRESS)
+
+    w_select = wireless_sub.add_parser("select",
+                                       help="Select APs from discovered list")
+    w_select.add_argument("--file", default=None,
+                          help="Load targets from JSON file")
+    w_select.add_argument("--scan-file", default=None,
+                          help="Use a specific scan output (default: most recent)")
+
+    w_assess = wireless_sub.add_parser("assess",
+                                       help="Run active assessment on selected APs")
+    w_assess.add_argument("--targets-file", default=None,
+                          help="Target selection JSON file (default: most recent)")
+    w_assess.add_argument("--file", default=None,
+                          help="Alias for --targets-file")
+    w_assess.add_argument("--interface", default=None,
+                          help="Wireless interface (auto-detect if not specified)")
+    w_assess.add_argument("--no-scan", action="store_true",
+                          help="Skip fresh scan, use cached data only")
+
+    w_capture = wireless_sub.add_parser("capture",
+                                        help="Capture WPA handshakes from selected targets")
+    w_capture.add_argument("--targets-file", "--file", default=None,
+                           help="Target selection JSON file (default: most recent)")
+    w_capture.add_argument("--interface", default=None,
+                           help="Wireless interface (auto-detect if not specified)")
+    w_capture.add_argument("--duration", type=int, default=60,
+                           help="Capture duration in seconds (default: 60)")
+    w_capture.add_argument("--dry-run", action="store_true",
+                           help="Show capture plan without capturing")
+    w_capture.add_argument("--force", action="store_true",
+                           help="Skip prompts and proceed with monitor mode")
+
+    w_crack = wireless_sub.add_parser("crack",
+                                      help="Crack captured WPA handshakes")
+    w_crack.add_argument("--cap", required=True,
+                         help="Capture file (.cap/.pcapng) with WPA handshake")
+    w_crack.add_argument("--wordlist", default=None,
+                         help="Wordlist file (default: system wordlist)")
+    w_crack.add_argument("--backend", choices=["aircrack", "hashcat", "auto"],
+                         default="auto",
+                         help="Cracking backend (default: auto-detect)")
+    w_crack.add_argument("--timeout", type=int, default=300,
+                         help="Max seconds to crack (default: 300)")
+    w_crack.add_argument("--dry-run", action="store_true",
+                         help="Show commands without cracking")
+
+    w_deauth = wireless_sub.add_parser("deauth",
+                                       help="Deauthenticate clients from target APs")
+    w_deauth.add_argument("--targets-file", default=None,
+                          help="Target selection JSON file (default: most recent)")
+    w_deauth.add_argument("--interface", default=None,
+                          help="Wireless interface (auto-detect if not specified)")
+    w_deauth.add_argument("--count", type=int, default=5,
+                          help="Deauth frames per target (default: 5)")
+    w_deauth.add_argument("--detect-clients", action="store_true",
+                          help="Scan for associated clients before deauth")
+    w_deauth.add_argument("--force", action="store_true",
+                          help="Skip prompts and proceed")
+    w_deauth.add_argument("--output-dir", default=None,
+                          help="Output directory (default: outputs/wireless/)")
+    w_deauth.add_argument("--dry-run", action="store_true",
+                          help="Show deauth plan without executing")
+
+    # ── server ──
+    server = subparsers.add_parser("server", help="Manage llama-server")
+    server_sub = server.add_subparsers(dest="server_action", help="Server actions")
+
+    # server start
+    s_start = server_sub.add_parser("start", help="Start llama-server")
+    s_start.add_argument(
+        "--model",
+        default=None,
+        help=f"Model ID (default: {PHASE_DEFAULTS['recon']})",
+    )
+    s_start.add_argument("--port", type=int, default=8080, help="Port (default: 8080)")
+    s_start.add_argument("--host", default="127.0.0.1", help="Host (default: 127.0.0.1)")
+    s_start.add_argument(
+        "--ngl", type=int, default=-1,
+        help="GPU layers (-1 = all, default: -1)",
+    )
+    s_start.add_argument(
+        "--offload-all", action="store_true",
+        help="Offload all layers to GPU (same as --ngl -1)",
+    )
+
+    # server stop
+    server_sub.add_parser("stop", help="Stop llama-server")
+
+    # server restart
+    s_restart = server_sub.add_parser("restart", help="Restart llama-server")
+    s_restart.add_argument(
+        "--model",
+        default=None,
+        help=f"Model ID (default: keep current or {PHASE_DEFAULTS['recon']})",
+    )
+    s_restart.add_argument("--port", type=int, default=8080, help="Port")
+    s_restart.add_argument("--host", default="127.0.0.1", help="Host")
+    s_restart.add_argument("--ngl", type=int, default=-1, help="GPU layers")
+    s_restart.add_argument(
+        "--offload-all", action="store_true",
+        help="Offload all layers to GPU (same as --ngl -1)",
+    )
+
+    # server status / models
+    server_sub.add_parser("status", help="Check server status")
+    server_sub.add_parser("models", help="List available models")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    # ── Server commands ──
+    if args.command == "server":
+        if not args.server_action:
+            parser.print_help()
+            sys.exit(1)
+
+        if args.server_action == "start":
+            cmd_server_start(args)
+        elif args.server_action == "stop":
+            cmd_server_stop()
+        elif args.server_action == "restart":
+            cmd_server_restart(args)
+        elif args.server_action == "status":
+            cmd_server_status()
+        elif args.server_action == "models":
+            cmd_server_models()
+        return
+
+    # ── Wireless commands ──
+    if args.command == "wireless":
+        if not args.wireless_action:
+            wireless.print_help()
+            sys.exit(1)
+
+        wireless_script = str(PROJECT_ROOT / "scripts" / "wireless_scan.py")
+        if args.wireless_action == "scan":
+            cmd = [sys.executable, wireless_script]
+            if args.duration:
+                cmd.extend(["--duration", str(args.duration)])
+            if args.band:
+                cmd.extend(["--band", args.band])
+            if args.interface:
+                cmd.extend(["--interface", args.interface])
+            if args.dry_run:
+                cmd.append("--dry-run")
+            if args.force:
+                cmd.append("--force")
+            script_result = subprocess.run(cmd, timeout=120)
+            sys.exit(script_result.returncode)
+        elif args.wireless_action == "select":
+            select_script = str(PROJECT_ROOT / "scripts" / "wireless_select.py")
+            cmd = [sys.executable, select_script]
+            if getattr(args, "scan_file", None):
+                cmd.extend(["--scan-file", args.scan_file])
+            if getattr(args, "file", None):
+                cmd.extend(["--scan-file", args.file])
+            if getattr(args, "auto", False):
+                cmd.append("--auto")
+            if getattr(args, "max", None):
+                cmd.extend(["--max", str(args.max)])
+            if getattr(args, "force", False):
+                cmd.append("--force")
+            script_result = subprocess.run(cmd, timeout=120)
+            sys.exit(script_result.returncode)
+        elif args.wireless_action == "assess":
+            assess_script = str(PROJECT_ROOT / "scripts" / "wireless_assess.py")
+            cmd = [sys.executable, assess_script]
+            if getattr(args, "targets_file", None):
+                cmd.extend(["--targets-file", args.targets_file])
+            if getattr(args, "file", None):
+                cmd.extend(["--targets-file", args.file])
+            if getattr(args, "interface", None):
+                cmd.extend(["--interface", args.interface])
+            if getattr(args, "no_scan", False):
+                cmd.append("--no-scan")
+            script_result = subprocess.run(cmd, timeout=120)
+            sys.exit(script_result.returncode)
+        elif args.wireless_action == "capture":
+            capture_script = str(PROJECT_ROOT / "scripts" / "wireless_capture.py")
+            cmd = [sys.executable, capture_script]
+            if getattr(args, "targets_file", None):
+                cmd.extend(["--targets-file", args.targets_file])
+            if getattr(args, "file", None):
+                cmd.extend(["--targets-file", args.file])
+            if getattr(args, "interface", None):
+                cmd.extend(["--interface", args.interface])
+            if getattr(args, "duration", 60) != 60:
+                cmd.extend(["--duration", str(args.duration)])
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
+            if getattr(args, "force", False):
+                cmd.append("--force")
+            script_result = subprocess.run(cmd, timeout=max(args.duration + 30, 180))
+            sys.exit(script_result.returncode)
+        elif args.wireless_action == "crack":
+            crack_script = str(PROJECT_ROOT / "scripts" / "wireless_crack.py")
+            cmd = [sys.executable, crack_script]
+            if getattr(args, "cap", None):
+                cmd.extend(["--cap", args.cap])
+            if getattr(args, "wordlist", None):
+                cmd.extend(["--wordlist", args.wordlist])
+            if getattr(args, "backend", "auto") != "auto":
+                cmd.extend(["--backend", args.backend])
+            if getattr(args, "timeout", 300) != 300:
+                cmd.extend(["--timeout", str(args.timeout)])
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
+            script_result = subprocess.run(cmd, timeout=300)
+            sys.exit(script_result.returncode)
+        elif args.wireless_action == "deauth":
+            deauth_script = str(PROJECT_ROOT / "scripts" / "wireless_deauth.py")
+            cmd = [sys.executable, deauth_script]
+            if getattr(args, "targets_file", None):
+                cmd.extend(["--targets-file", args.targets_file])
+            if getattr(args, "interface", None):
+                cmd.extend(["--interface", args.interface])
+            if getattr(args, "count", 5) != 5:
+                cmd.extend(["--count", str(args.count)])
+            if getattr(args, "detect_clients", False):
+                cmd.append("--detect-clients")
+            if getattr(args, "force", False):
+                cmd.append("--force")
+            if getattr(args, "output_dir", None):
+                cmd.extend(["--output-dir", args.output_dir])
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
+            script_result = subprocess.run(cmd, timeout=120)
+            sys.exit(script_result.returncode)
+        return
+
+    # ── Scan ──
+    # ── Deprecation warning for --wireless ──
+    if args.command == "scan" and getattr(args, "wireless", False):
+        warn("--wireless is deprecated. Use 'portshim wireless scan' instead.")
+        print("  The --wireless flag no longer enables wireless scanning.")
+        print("  Wireless is now a separate engagement type:")
+        print(f"    {CYAN}portshim wireless scan{RESET}    # Discover APs")
+        print(f"    {CYAN}portshim wireless select{RESET}  # Select targets")
+        print(f"    {CYAN}portshim wireless assess{RESET}  # Attack selected targets")
+        print()
+    # ── Banner ──
+    print(f"\n{BOLD}{RED}♦ {RESET}{BOLD}PORTSHIM{RESET} {RED}♦{RESET}")
+    print(f"{CYAN}On-Site Security Assessment Pipeline{RESET}\n")
+
+    # ── Dry run ──
+    if args.dry_run:
+        print(f"{YELLOW}[DRY RUN] — no changes will be made{RESET}\n")
+        print(f"  Would configure: target={args.target}, engagement={args.engagement}, mode={args.mode}")
+        print(f"  Would sync knowledge: {not args.no_freshness_check}")
+        print(f"  Models dir: {args.models_dir or 'default'}")
+        if args.mode in ("local", "hybrid") and not args.no_server:
+            model = PHASE_DEFAULTS["recon"]
+            print(f"  Would start llama-server: {model} on 127.0.0.1:8080")
+        print()
+        show_hermes_instructions(args.target, args.engagement, args.mode, args.wireless)
+        return
+
+    # ── Execute ──
+    if not check_prerequisites():
+        print(f"\n{RED}Prerequisites missing. Run 'python deploy.py' first.{RESET}")
+        sys.exit(1)
+
+    # Auto-start server for local/hybrid modes
+    if args.mode in ("local", "hybrid") and not args.no_server:
+        model = PHASE_DEFAULTS["recon"]
+        if server_running():
+            current = server_get_model()
+            if current != model:
+                warn(f"Server running with different model ({current}). Restarting...")
+                server_stop()
+                print()
+                server_start(model_id=model)
+            else:
+                status(f"llama-server already running with {model}", True)
+        else:
+            server_start(model_id=model)
+
+    sync_knowledge()
+
+    if not args.no_freshness_check:
+        check_freshness()
+
+    if not configure_engagement(args.engagement):
+        sys.exit(1)
+
+    if not configure_llm(args.mode, args.models_dir):
+        sys.exit(1)
+
+    show_hermes_instructions(args.target, args.engagement, args.mode, args.wireless)
+
+
+if __name__ == "__main__":
+    main()
