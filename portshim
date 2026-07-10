@@ -584,6 +584,14 @@ def main():
                           help="Load targets from JSON file")
     w_select.add_argument("--scan-file", default=None,
                           help="Use a specific scan output (default: most recent)")
+    w_select.add_argument("--auto", action="store_true",
+                          help="Auto-select strongest APs by signal")
+    w_select.add_argument("--max", type=int, default=5,
+                          help="Max APs to auto-select (default: 5)")
+    w_select.add_argument("--force", action="store_true",
+                          help="Alias for --auto")
+    w_select.add_argument("--list", action="store_true",
+                          help="Print AP table without selecting")
 
     w_assess = wireless_sub.add_parser("assess",
                                        help="Run active assessment on selected APs")
@@ -742,6 +750,8 @@ def main():
                 cmd.extend(["--max", str(args.max)])
             if getattr(args, "force", False):
                 cmd.append("--force")
+            if getattr(args, "list", False):
+                cmd.append("--list")
             script_result = subprocess.run(cmd, timeout=120)
             sys.exit(script_result.returncode)
         elif args.wireless_action == "assess":
