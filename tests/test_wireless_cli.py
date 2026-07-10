@@ -87,6 +87,35 @@ class TestWirelessSubcommand:
         assert "No target selection found" in out or "Target assessment" in out, f"Unexpected output: {out}"
 
 
+class TestWirelessSelectCLI:
+    """CLI dispatch tests for wireless select subcommand."""
+
+    def test_select_help_shows_new_options(self):
+        """--help should list --auto, --max, --force, --list."""
+        rc, out, err = run_portshim("wireless", "select", "--help")
+        assert rc == 0
+        for opt in ["--auto", "--max", "--force", "--list"]:
+            assert opt in out, f"Expected '{opt}' in select help: {out}"
+
+    def test_select_auto_flag_accepted(self):
+        """--auto should be accepted without error."""
+        rc, out, err = run_portshim("wireless", "select", "--auto", "--max", "3")
+        # rc=0 if old scan data exists (clean run), rc=1 if no scan data found
+        assert rc in (0, 1), f"Unexpected rc: {rc}\n{err}"
+        assert "Auto-select" in out or "No scan results found" in out, \
+            f"Unexpected output: {out}"
+
+    def test_select_list_flag_accepted(self):
+        """--list should be accepted without error."""
+        rc, out, err = run_portshim("wireless", "select", "--list")
+        assert rc in (0, 1), f"Unexpected rc: {rc}\n{err}"
+
+    def test_select_force_flag_accepted(self):
+        """--force should be accepted (alias for --auto)."""
+        rc, out, err = run_portshim("wireless", "select", "--force", "--max", "2")
+        assert rc in (0, 1), f"Unexpected rc: {rc}\n{err}"
+
+
 class TestDeprecatedWirelessFlag:
     """portshim scan --wireless deprecation."""
 

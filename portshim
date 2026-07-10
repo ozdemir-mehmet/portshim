@@ -592,6 +592,8 @@ def main():
                           help="Alias for --auto")
     w_select.add_argument("--list", action="store_true",
                           help="Print AP table without selecting")
+    w_select.add_argument("--output-dir", default=None,
+                          help="Output directory (default: outputs/wireless/)")
 
     w_assess = wireless_sub.add_parser("assess",
                                        help="Run active assessment on selected APs")
@@ -752,6 +754,8 @@ def main():
                 cmd.append("--force")
             if getattr(args, "list", False):
                 cmd.append("--list")
+            if getattr(args, "output_dir", None):
+                cmd.extend(["--output-dir", args.output_dir])
             script_result = subprocess.run(cmd, timeout=120)
             sys.exit(script_result.returncode)
         elif args.wireless_action == "assess":
