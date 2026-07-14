@@ -1,0 +1,50 @@
+sources:
+- repo: zakirkun/guardian-cli
+  branch: main
+  last_synced_commit: 51864a81f484e2826dccd2f60fd181a040585962
+  extracted:
+  - path: README.md
+    maps_to: references/guardian-upstream-readme.md
+  notes: Guardian CLI — primary scanning and exploitation engine
+- repo: JoasASantos/NeuroSploit
+  branch: main
+  last_synced_commit: 3ca04498a9812f1b544c89bd70e4dbe9c899296b
+  extracted:
+  - path: README.md
+    maps_to: references/neurosploit-upstream-readme.md
+  notes: NeuroSploit — autonomous exploitation with 348 agents
+- repo: vulnersCom/nmap-vulners
+  branch: master
+  last_synced_commit: 0555294abe71857c581afc2ef62ea3ca5c7b7145
+  extracted:
+  - path: README.md
+    maps_to: references/nmap-vulners-upstream-readme.md
+  notes: nmap-vulners — NSE script for CVE cross-referencing
+- repo: mukul975/Anthropic-Cybersecurity-Skills
+  branch: main
+  last_synced_commit: 673da1f3b0b7be34ffc9624ef3858fe45f1c3bed
+  extracted:
+  - path: README.md
+    maps_to: references/anthropic-skills-upstream-readme.md
+  notes: 817 structured cybersecurity skills for AI agents
+- repo: infosecn1nja/red-teaming-toolkit
+  branch: master
+  last_synced_commit: 053fe2ee2e764cdcddd6f08820a4194db5cbd0a8
+  extracted:
+  - path: README.md
+    maps_to: references/red-team-toolkit-upstream.md
+  notes: Red team tool reference organized by kill-chain phase
+- repo: nmap/nmap
+  branch: master
+  last_synced_commit: null
+  extracted:
+  - path: docs/nse-guide.md
+    maps_to: references/nmap-nse-guide.md
+  notes: Official Nmap NSE documentation
+- repo: projectdiscovery/nuclei
+  branch: main
+  last_synced_commit: f9cf234c12a333656751e04493dc4b1f4f5f3e88
+  extracted:
+  - path: README.md
+    maps_to: references/nuclei-upstream-readme.md
+  notes: Nuclei — vulnerability scanner template reference

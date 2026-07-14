@@ -1,0 +1,17 @@
+# Knowledge Source Manifest
+# Tracks external repositories that inform this skill.
+# Run: python scripts/sync_knowledge.py --skill <skill-name>
+#      python scripts/sync_knowledge.py --all
+
+sources: []
+# Example:
+# sources:
+#   - repo: owner/repo-name
+#     branch: main
+#     last_synced_commit: null
+#     extracted:
+#       - path: README.md
+#         maps_to: references/upstream-readme.md
+#       - path: docs/setup.md
+#         maps_to: references/upstream-setup.md
+#     notes: "Brief description of why this repo is tracked"

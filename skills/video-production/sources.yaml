@@ -1,0 +1,15 @@
+sources:
+- repo: hexgrad/kokoro
+  branch: main
+  last_synced_commit: dfb907a02bba8152ca444717ca5d78747ccb4bec
+  extracted:
+  - path: README.md
+    maps_to: references/kokoro-upstream-readme.md
+  notes: Kokoro TTS — text-to-speech for video narration
+- repo: facebookresearch/audiocraft
+  branch: main
+  last_synced_commit: 896ec7c47f5e5d1e5aa1e4b260c4405328bf009d
+  extracted:
+  - path: README.md
+    maps_to: references/audiocraft-upstream-readme.md
+  notes: AudioCraft — background music generation
