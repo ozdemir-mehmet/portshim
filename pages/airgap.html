@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air-Gapped Operations — PortShim</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f59e0b'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='bold' font-size='16' fill='%23020617'%3EPS%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0f; --bg-alt: #0f172a; --bg-card: #0a0a0f;
+      --text: #e2e8f0; --text-muted: #94a3b8; --text-dim: #64748b; --text-code: #e2e8f0;
+      --border: #1e293b; --border-light: #334155;
+      --accent: #f59e0b; --accent-hover: #fbbf24;
+      --code-bg: #1e293b; --code-block-bg: #0f172a;
+      --nav-bg: rgba(10,10,15,0.85); --nav-border: #1e293b;
+      --selection-bg: rgba(245,158,11,0.2); --selection-text: #fef08a;
+      --btn-secondary-text: #e2e8f0; --btn-secondary-hover: #1e293b;
+      --footer-border: #1e293b; --footer-text: #475569;
+      --toggle-bg: #1e293b; --toggle-hover: #334155;
+      --page-color: #06b6d4;
+    }
+    [data-theme="light"] {
+      --bg: #ffffff; --bg-alt: #f8fafc; --bg-card: #ffffff;
+      --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-code: #1e293b;
+      --border: #e2e8f0; --border-light: #cbd5e1;
+      --accent: #d97706; --accent-hover: #b45309;
+      --code-bg: #f1f5f9; --code-block-bg: #f8fafc;
+      --nav-bg: rgba(255,255,255,0.9); --nav-border: #e2e8f0;
+      --selection-bg: rgba(217,119,6,0.2); --selection-text: #78350f;
+      --btn-secondary-text: #0f172a; --btn-secondary-hover: #e2e8f0;
+      --footer-border: #e2e8f0; --footer-text: #94a3b8;
+      --toggle-bg: #e2e8f0; --toggle-hover: #cbd5e1;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden;
+      transition: background .25s, color .25s;
+    }
+    ::selection { background: var(--selection-bg); color: var(--selection-text); }
+    h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); }
+    h2 { font-size: clamp(1.3rem, 2.5vw, 1.8rem); margin-top: 40px; margin-bottom: 12px; color: var(--page-color); }
+    h3 { font-size: 1.15rem; margin-top: 28px; margin-bottom: 8px; }
+    p { color: var(--text-muted); margin-bottom: 16px; }
+    a { color: var(--accent); text-decoration: none; transition: color .2s; }
+    a:hover { color: var(--accent-hover); }
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--code-bg); color: var(--text-code); padding: 2px 6px;
+      border-radius: 4px; font-size: .85em;
+    }
+    pre code {
+      display: block; padding: 1rem 1.2rem; border-radius: 8px;
+      background: var(--code-block-bg); border: 1px solid var(--border);
+      overflow-x: auto; font-size: .82rem; line-height: 1.5;
+    }
+    ul, ol { color: var(--text-muted); margin-bottom: 16px; padding-left: 24px; }
+    li { margin-bottom: 6px; }
+    .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: var(--nav-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background .25s, border-color .25s;
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 60px;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Courier New', monospace; font-weight: 700; font-size: 1.1rem;
+      color: var(--accent);
+    }
+    .nav-back { font-size: .85rem; color: var(--text-muted); }
+    .nav-back:hover { color: var(--accent); }
+
+    .page-hero {
+      padding: 120px 0 60px; text-align: center;
+      background: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(6,182,212,0.08) 0%, transparent 70%);
+    }
+    .page-hero .icon { font-size: 3rem; margin-bottom: 16px; }
+    .page-hero h1 { margin-bottom: 12px; }
+    .page-hero p { font-size: 1.1rem; max-width: 640px; margin: 0 auto; }
+
+    .page-content { padding: 40px 0 80px; }
+
+    .theme-toggle {
+      width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--toggle-bg); color: var(--text);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; transition: all .2s; padding: 0;
+    }
+    .theme-toggle:hover { background: var(--toggle-hover); }
+
+    footer {
+      border-top: 1px solid var(--footer-border); padding: 40px 0; text-align: center;
+    }
+    footer p { font-size: .82rem; color: var(--footer-text); }
+    .footer-links { display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; }
+    .footer-links a { font-size: .85rem; color: var(--text-muted); }
+    .footer-links a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <div class="nav-brand">⬡ PortShim</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <a href="../index.html" class="nav-back">← Back to Home</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+    </div>
+  </div>
+</nav>
+
+<section class="page-hero">
+  <div class="container">
+    <div class="icon">🔌</div>
+    <h1>Air-Gapped Operations</h1>
+    <p>Fully offline pentesting powered by local LLMs — no cloud dependency, no data leakage, no internet required.</p>
+  </div>
+</section>
+
+<section class="page-content">
+  <div class="container">
+    
+<h2>Overview</h2>
+<p>PortShim is designed from the ground up for air-gapped, on-site operations. Every component — inference engine, model storage, CVE database, and report generator — runs locally on the operator's machine.</p>
+
+<h2>Local Inference Stack</h2>
+<p><strong>llama.cpp</strong> serves as the inference backend with Vulkan GPU offload. The <code>portshim</code> CLI manages the entire lifecycle: server start, model loading, health checks, and graceful shutdown.</p>
+<p><strong>Hardware targets:</strong> Consumer GPUs with 16–32 GB VRAM (RTX 4090, RX 7900 XTX, Radeon 8060S). Models run at Q4_K_M quantisation for optimal quality-to-speed ratio.</p>
+
+<h2>Three-Model Architecture</h2>
+<p>Each phase is assigned a model optimised for its task:</p>
+<ul>
+  <li><strong>Recon &amp; CVE analysis:</strong> Qwen3-Coder 30B (Q4_K_M) — 447 PP tok/s on Vulkan</li>
+  <li><strong>Exploitation &amp; reporting:</strong> SuperGemma4 26B (Q4_K_M) — 525 PP tok/s</li>
+  <li><strong>Alternative exploit path:</strong> HauhauCS 35B (Q4_K_S) — 481 PP tok/s</li>
+</ul>
+<p>All models are Apache 2.0 or permissive licences — no restrictions on security use cases.</p>
+
+<h2>Pre-Synced Knowledge Bases</h2>
+<p>Before going on-site, sync the following data:</p>
+<ul>
+  <li><strong>CVE database</strong> — Local SQLite copy of known vulnerabilities with CVSS scores</li>
+  <li><strong>NSE scripts</strong> — Full nmap NSE library</li>
+  <li><strong>Nuclei templates</strong> — Curated set of protocol-specific detection templates</li>
+  <li><strong>Device classifiers</strong> — 40+ role signatures for topology mapping</li>
+</ul>
+<p>Run <code>python scripts/sync_knowledge.py</code> to update before deployment.</p>
+
+<h2>Bootstrap Process</h2>
+<p><code>deploy.py</code> handles first-time setup:</p>
+<ol>
+  <li>Detects GPU capabilities (Vulkan vs. CPU fallback)</li>
+  <li>Downloads the three recommended GGUF models to <code>~/local-models/</code></li>
+  <li>Initialises the SQLite database and knowledge stores</li>
+  <li>Installs the <code>portshim</code> CLI to the system PATH</li>
+</ol>
+
+<h2>Hybrid Mode</h2>
+<p>When the engagement allows, PortShim supports a hybrid mode: keep exploitation fully local (to avoid API refusals on exploit-specific prompts) while routing reporting and CVE analysis through cloud APIs for faster iteration. Configure via <code>llm-config.py hybrid</code>.</p>
+
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="../index.html">Home</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#quickstart">Quick Start</a>
+      <a href="../index.html#faq">FAQ</a>
+    </div>
+    <p>PortShim v0.5.11 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
+  </div>
+</footer>
+
+<script>
+  (function() {
+    const toggle = document.getElementById('themeToggle');
+    const KEY = 'portshim-theme';
+    function setTheme(t) {
+      document.documentElement.setAttribute('data-theme', t);
+      toggle.textContent = t === 'dark' ? '🌙' : '☀️';
+      try { localStorage.setItem(KEY, t); } catch {}
+    }
+    const saved = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
+    if (saved) { setTheme(saved); }
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) { setTheme('light'); }
+    else { setTheme('dark'); }
+    toggle.addEventListener('click', () => {
+      const c = document.documentElement.getAttribute('data-theme');
+      setTheme(c === 'light' ? 'dark' : 'light');
+    });
+  })();
+</script>
+</body>
+</html>

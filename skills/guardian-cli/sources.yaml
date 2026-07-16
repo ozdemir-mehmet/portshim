@@ -1,0 +1,29 @@
+sources:
+- repo: zakirkun/guardian-cli
+  branch: main
+  last_synced_commit: 51864a81f484e2826dccd2f60fd181a040585962
+  extracted:
+  - path: README.md
+    maps_to: references/upstream-readme.md
+  notes: Guardian CLI — AI-powered multi-agent pentesting framework
+- repo: infosecn1nja/red-teaming-toolkit
+  branch: master
+  last_synced_commit: 053fe2ee2e764cdcddd6f08820a4194db5cbd0a8
+  extracted:
+  - path: README.md
+    maps_to: references/red-team-toolkit.md
+  notes: Curated red team tool reference organized by kill-chain phase
+- repo: projectdiscovery/nuclei
+  branch: main
+  last_synced_commit: f9cf234c12a333656751e04493dc4b1f4f5f3e88
+  extracted:
+  - path: README.md
+    maps_to: references/nuclei-upstream-readme.md
+  notes: Nuclei — vulnerability scanner used by Guardian's deep-scan workflows
+- repo: projectdiscovery/httpx
+  branch: main
+  last_synced_commit: f66e469116d8de3416dcdfa7b8f4083e7e7dc246
+  extracted:
+  - path: README.md
+    maps_to: references/httpx-upstream-readme.md
+  notes: httpx — HTTP probing tool used by Guardian's recon workflow

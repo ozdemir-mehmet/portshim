@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PortShim v0.5.11 — Picking the network, one port at a time</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f59e0b'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='bold' font-size='16' fill='%23020617'%3EPS%3C/text%3E%3C/svg%3E">
+  <style>
+    /* ── Theme Variables ── */
+    :root {
+      --bg: #0a0a0f;
+      --bg-alt: #0f172a;
+      --bg-card: #0a0a0f;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --text-code: #e2e8f0;
+      --border: #1e293b;
+      --border-light: #334155;
+      --accent: #f59e0b;
+      --accent-hover: #fbbf24;
+      --code-bg: #1e293b;
+      --code-block-bg: #0f172a;
+      --nav-bg: rgba(10,10,15,0.85);
+      --nav-border: #1e293b;
+      --selection-bg: rgba(245,158,11,0.2);
+      --selection-text: #fef08a;
+      --btn-secondary-text: #e2e8f0;
+      --btn-secondary-hover: #1e293b;
+      --nav-links-hover: #e2e8f0;
+      --hero-line: #475569;
+      --hero-gradient: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(245,158,11,.06) 0%, transparent 70%),
+                       radial-gradient(ellipse 40% 40% at 30% 100%, rgba(6,182,212,.04) 0%, transparent 60%);
+      --hero-title-gradient: linear-gradient(135deg, #e2e8f0 0%, #f59e0b 100%);
+      --step-bg: #0a0a0f;
+      --footer-border: #1e293b;
+      --footer-text: #475569;
+      --toggle-bg: #1e293b;
+      --toggle-hover: #334155;
+    }
+    [data-theme="light"] {
+      --bg: #ffffff;
+      --bg-alt: #f8fafc;
+      --bg-card: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --text-code: #1e293b;
+      --border: #e2e8f0;
+      --border-light: #cbd5e1;
+      --accent: #d97706;
+      --accent-hover: #b45309;
+      --code-bg: #f1f5f9;
+      --code-block-bg: #f8fafc;
+      --nav-bg: rgba(255,255,255,0.9);
+      --nav-border: #e2e8f0;
+      --selection-bg: rgba(217,119,6,0.2);
+      --selection-text: #78350f;
+      --btn-secondary-text: #0f172a;
+      --btn-secondary-hover: #e2e8f0;
+      --nav-links-hover: #0f172a;
+      --hero-line: #cbd5e1;
+      --hero-gradient: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(217,119,6,.04) 0%, transparent 70%);
+      --hero-title-gradient: linear-gradient(135deg, #0f172a 0%, #d97706 100%);
+      --step-bg: #ffffff;
+      --footer-border: #e2e8f0;
+      --footer-text: #94a3b8;
+      --toggle-bg: #e2e8f0;
+      --toggle-hover: #cbd5e1;
+    }
+
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      transition: background .25s, color .25s;
+    }
+    ::selection { background: var(--selection-bg); color: var(--selection-text); }
+
+    /* ── Typography ── */
+    h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
+    h1 { font-size: clamp(2rem, 5vw, 3.5rem); }
+    h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); }
+    h3 { font-size: 1.2rem; }
+    p { color: var(--text-muted); }
+    a { color: var(--accent); text-decoration: none; transition: color .2s; }
+    a:hover { color: var(--accent-hover); }
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--code-bg);
+      color: var(--text-code);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: .85em;
+    }
+    pre code {
+      display: block;
+      padding: 1rem 1.2rem;
+      border-radius: 8px;
+      background: var(--code-block-bg);
+      border: 1px solid var(--border);
+      overflow-x: auto;
+      font-size: .82rem;
+      line-height: 1.5;
+    }
+
+    /* ── Layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; }
+    .section-label {
+      display: inline-block;
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .section-title { margin-bottom: 16px; }
+    .section-desc { max-width: 600px; margin-bottom: 48px; font-size: 1.05rem; }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: var(--nav-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background .25s, border-color .25s;
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 60px;
+    }
+    .nav-left { display: flex; align-items: center; gap: 28px; }
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Courier New', monospace; font-weight: 700; font-size: 1.1rem;
+      color: var(--accent);
+    }
+    .nav-links { display: flex; gap: 24px; list-style: none; }
+    .nav-links a {
+      font-size: .85rem; color: var(--text-muted); transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--nav-links-hover); }
+
+    /* ── Theme Toggle ── */
+    .theme-toggle {
+      width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--toggle-bg); color: var(--text);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; transition: all .2s; padding: 0;
+    }
+    .theme-toggle:hover { background: var(--toggle-hover); }
+
+    .hamburger { display: none; flex-direction: column; gap: 4px; cursor: pointer; background: none; border: none; padding: 4px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--text-muted); border-radius: 2px; transition: .2s; }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 100px 0 60px; text-align: center;
+      background: var(--hero-gradient);
+      background-color: #0e1620;
+    }
+    [data-theme="light"] .hero { background-color: transparent; }
+    .hero-logo { margin-bottom: 16px; text-align: center; }
+    .hero-logo img { width: clamp(180px, 30vw, 390px); height: auto; border-radius: 12px; }
+    .hero-logo .logo-dark { display: inline-block; }
+    .hero-logo .logo-light { display: none; }
+    [data-theme="light"] .hero-logo .logo-dark { display: none; }
+    [data-theme="light"] .hero-logo .logo-light { display: inline-block; }
+    .hero h1 { margin-bottom: 16px; font-size: clamp(1.5rem, 3.75vw, 2.625rem); background: var(--hero-title-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero p { font-size: 1.05rem; max-width: 560px; margin: 0 auto 28px; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: .9rem;
+      cursor: pointer; transition: all .2s; border: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #d97706);
+      color: #0a0a0f; box-shadow: 0 4px 20px rgba(245,158,11,.25);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(245,158,11,.35); }
+    .btn-secondary {
+      background: transparent; color: var(--btn-secondary-text); border: 1px solid var(--border-light);
+    }
+    .btn-secondary:hover { background: var(--btn-secondary-hover); border-color: var(--text-muted); }
+
+    /* ── Features ── */
+    .features { background: var(--bg-alt); }
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+    .feature-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 28px; transition: all .2s; color: inherit; text-decoration: none;
+    }
+    .feature-card:hover { border-color: var(--accent); box-shadow: 0 4px 24px rgba(245,158,11,.06); transform: translateY(-2px); }
+    .feature-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; font-size: 1.2rem;
+    }
+    .feature-card h3 { margin-bottom: 8px; }
+    .feature-card p { font-size: .9rem; }
+
+    /* ── How It Works ── */
+    .how { background: var(--bg-alt); }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .step {
+      display: flex; gap: 20px; align-items: flex-start;
+      padding: 20px; border-radius: 12px;
+      background: var(--step-bg); border: 1px solid var(--border);
+    }
+    .step-num {
+      width: 36px; height: 36px; min-width: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #d97706);
+      color: #0a0a0f; font-weight: 700; font-size: .85rem;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step h4 { margin-bottom: 4px; }
+    .step p { font-size: .88rem; }
+
+    /* ── Requirements ── */
+    .req-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .req-card {
+      background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 20px;
+    }
+    .req-card h4 { color: var(--accent); margin-bottom: 6px; font-size: .9rem; }
+    .req-card p, .req-card li { font-size: .85rem; color: var(--text-muted); }
+    .req-card ul { list-style: none; padding: 0; }
+    .req-card ul li { padding: 2px 0; }
+    .req-card ul li::before { content: "› "; color: var(--accent); }
+
+    /* ── Quick Start ── */
+    .quickstart { background: var(--bg-alt); }
+    .qs-tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+    .qs-tab {
+      padding: 10px 20px; font-size: .85rem; cursor: pointer;
+      color: var(--text-dim); border-bottom: 2px solid transparent;
+      background: none; border-top: none; border-left: none; border-right: none;
+      font-family: inherit; transition: all .2s;
+    }
+    .qs-tab:hover { color: var(--text); }
+    .qs-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .qs-panel { display: none; }
+    .qs-panel.active { display: block; }
+
+    /* ── FAQ ── */
+    .faq-item { border-bottom: 1px solid var(--border); padding: 0; overflow: hidden; }
+    .faq-q {
+      width: 100%; text-align: left; padding: 18px 0;
+      background: none; border: none; color: var(--text); font-size: 1rem; font-weight: 500;
+      cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+      font-family: inherit; transition: color .2s;
+    }
+    .faq-q:hover { color: var(--accent); }
+    .faq-q::after { content: "+"; font-size: 1.2rem; color: var(--text-dim); transition: transform .2s; margin-left: auto; }
+    .faq-item.open .faq-q::after { transform: rotate(45deg); }
+    .faq-a {
+      max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s ease;
+      padding: 0; color: var(--text-muted); font-size: .92rem; line-height: 1.7;
+    }
+    .faq-item.open .faq-a { max-height: 400px; padding: 0 0 18px; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--footer-border); padding: 40px 0; text-align: center;
+    }
+    footer p { font-size: .82rem; color: var(--footer-text); }
+    footer .socials { display: flex; justify-content: center; gap: 20px; margin-bottom: 16px; }
+    footer .socials a { color: var(--text-dim); font-size: .85rem; }
+    footer .socials a:hover { color: var(--accent); }
+
+    /* ── Animations ── */
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .anim { animation: fadeUp .6s ease forwards; opacity: 0; }
+    .anim-d1 { animation-delay: .1s; }
+    .anim-d2 { animation-delay: .2s; }
+    .anim-d3 { animation-delay: .3s; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .nav-links { display: none; position: absolute; top: 60px; left: 0; right: 0;
+        background: var(--bg); border-bottom: 1px solid var(--border);
+        flex-direction: column; padding: 16px 24px; gap: 12px;
+      }
+      .nav-links.open { display: flex; }
+      .hamburger { display: flex; }
+      section { padding: 48px 0; }
+      .hero { padding: 100px 0 48px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="container">
+    <div class="nav-brand">
+      <svg width="20" height="20" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#f59e0b"/><text x="16" y="22" text-anchor="middle" font-family="monospace" font-weight="bold" font-size="16" fill="#020617">PS</text></svg>
+      PortShim
+    </div>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How It Works</a></li>
+      <li><a href="#requirements">Requirements</a></li>
+      <li><a href="#quickstart">Quick Start</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-right">
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero" id="hero">
+  <div class="container">
+    <div class="hero-logo anim">
+      <img class="logo-dark" src="portshim-dark.svg" alt="PortShim" width="660" height="660">
+      <img class="logo-light" src="portshim-light.svg" alt="PortShim" width="660" height="660">
+    </div>
+    <h1 class="anim anim-d1">Picking the network,<br>one port at a time</h1>
+    <p class="anim anim-d2">An on-site pentest pipeline for authorised security professionals. Air-gapped, LLM-powered, and built to operate without leaving a trace.</p>
+    <p class="anim anim-d2" style="margin-top:0.5rem;font-size:0.9rem;opacity:0.7;">AI-agent friendly — works with <a href="https://hermes-agent.nousresearch.com" style="color:var(--accent);">Hermes Agent</a>, Claude Code, or any CLI-capable assistant. Guided phase gates, report drafting, and decision support.</p>
+    <div class="hero-buttons anim anim-d3">
+      <a class="btn btn-primary" href="#quickstart">Get Started</a>
+      <a class="btn btn-secondary" href="#features">Learn More</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ── -->
+<section class="features" id="features">
+  <div class="container">
+    <span class="section-label">Features</span>
+    <h2 class="section-title">Built for the field</h2>
+    <p class="section-desc">PortShim is designed for on-site operations where every second counts and every packet matters.</p>
+    <div class="features-grid">
+      <a href="pages/pipeline.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#f59e0b15;color:#f59e0b;">⚡</div>
+        <h3>6-Phase Pipeline</h3>
+        <p>Phase 0 (Scope) through Phase 5 (Retest). Each phase ends with a review gate - APPROVE, RERUN, MODIFY SCOPE, or ABORT.</p>
+      </a>
+      <a href="pages/airgap.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#06b6d415;color:#06b6d4;">🔌</div>
+        <h3>Air-Gapped Operations</h3>
+        <p>Runs entirely on local LLMs via llama.cpp with Vulkan GPU offload. Three local models per phase - no internet required.</p>
+      </a>
+      <a href="pages/profiles.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#10b98115;color:#10b981;">🧩</div>
+        <h3>Engagement Profiles</h3>
+        <p>Three noise profiles (Silent Entry, Surgical, Full Assault) control how aggressively tools probe the target. Set once per engagement.</p>
+      </a>
+      <a href="pages/reports.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#8b5cf615;color:#8b5cf6;">📊</div>
+        <h3>Multi-Format Reports</h3>
+        <p>DOCX (branded), PPTX (6-slide exec brief), PDF (weasyprint), XLSX (severity-coloured checklist) - all from one command.</p>
+      </a>
+      <a href="pages/server.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#ef444415;color:#ef4444;">🛡️</div>
+        <h3>Server Lifecycle</h3>
+        <p>Built-in portshim CLI manages llama-server: start, stop, restart, status, model switching. Auto-starts on scan for local mode.</p>
+      </a>
+      <a href="pages/gates.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#f59e0b15;color:#f59e0b;">📊</div>
+        <h3>Structured Gate Reviews</h3>
+        <p>Gate 1 uses topology.py --gate1 for complete, never-truncated host summaries from XML. No more missing hosts in truncated output.</p>
+      </a>
+      <a href="pages/wireless.html" class="feature-card" style="display:block;">
+        <div class="feature-icon" style="background:#10b98115;color:#10b981;">📡</div>
+        <h3>Wireless Assessment</h3>
+        <p>Discover, select, and assess nearby access points without dropping your network connection. Auto-fallback to managed mode, with --force for full airodump-ng monitoring.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── How It Works ── -->
+<section class="how" id="how">
+  <div class="container">
+    <span class="section-label">How It Works</span>
+    <h2 class="section-title">The 6 Phases of PortShim</h2>
+    <p class="section-desc">Each phase has a clear goal, a defined model assignment, and a gate condition before moving to the next.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">0</div>
+        <div><h4>Scope & Setup</h4><p>Bootstrap environment, sync knowledge bases, configure engagement profile (Silent Entry / Surgical / Full Assault) and LLM mode (local / hybrid / cloud).</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div><h4>Reconnaissance</h4><p>nmap sweep (all ports, OS detection, service versioning), device classification (40+ roles), topology mapping. Gate 1 uses topology.py --gate1 for complete host summaries from XML.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div><h4>Vulnerability Analysis</h4><p>CVE cross-reference via nmap-vulners NSE, nuclei deep-scan, CVSS v3.1 scoring. Prioritised findings list with exploit availability markers.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div><h4>Exploitation</h4><p>Hydra brute-force, paramiko SSH automation, manual probe of discovered services (telnet, HTTP, UPnP). SuperGemma4 26B for exploit analysis. Non-destructive escalation only.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div><h4>Reporting</h4><p>Multi-format deliverables from one command: DOCX (branded, Calibri font, A4), PPTX (6-slide exec brief), PDF (weasyprint, A4), XLSX (severity-coloured checklist with dropdowns).</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div><h4>Retest</h4><p>Rescan after remediation, compare baseline vs retest, auto-classify as FIXED / STILL OPEN / NEW / REGRESSION. Update checklist with retest status.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Requirements ── -->
+<section id="requirements">
+  <div class="container">
+    <span class="section-label">Requirements</span>
+    <h2 class="section-title">What you need to run PortShim</h2>
+    <p class="section-desc">Designed for a field laptop with a capable GPU. All dependencies are local — no cloud required.</p>
+    <div class="req-grid">
+      <div class="req-card">
+        <h4>Hardware</h4>
+        <ul>
+          <li>AMD Radeon 8060S / NVIDIA RTX 3090+ (24 GB VRAM)</li>
+          <li>64 GB RAM recommended</li>
+          <li>50 GB+ free disk for models</li>
+          <li>Linux (macOS partial, Windows via WSL2)</li>
+        </ul>
+      </div>
+      <div class="req-card">
+        <h4>Software</h4>
+        <ul>
+          <li>llama.cpp b9870+ (Vulkan or CUDA)</li>
+          <li>Python 3.11+</li>
+          <li>nmap, hydra, sshpass (via deploy.py)</li>
+          <li>nuclei, httpx (Go tools, via deploy.py)</li>
+        </ul>
+      </div>
+      <div class="req-card">
+        <h4>Models</h4>
+        <ul>
+          <li>Qwen3-Coder 30B (Q4_K_M) — recon & CVE analysis</li>
+          <li>SuperGemma4 26B (Q4_K_M) — exploitation & reports</li>
+          <li>HauhauCS 35B (Q4_K_S) — alternative exploit</li>
+        </ul>
+      </div>
+      <div class="req-card">
+        <h4>Network</h4>
+        <ul>
+          <li>Target network access (authorised)</li>
+          <li>USB-to-Ethernet adapter for wired scanning — <strong>Dell USB-C (Realtek RTL8153)</strong> recommended. D-Link DUB-1312 as backup. Avoid ASIX on generic cdc_ncm driver.</li>
+          <li>USB Wi-Fi adapter (Alfa AWUS036ACH — RTL8812AU, <a href="pages/wireless.html#hardware-recommendations">more</a>)</li>
+          <li>No internet required for local mode</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Quick Start ── -->
+<section class="quickstart" id="quickstart">
+  <div class="container">
+    <span class="section-label">Quick Start</span>
+    <h2 class="section-title">Get PortShim running in minutes</h2>
+    <p class="section-desc">Start the server, load a model, and run your first scan analysis.</p>
+    <div style="background:#0a0a0f;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">
+      <div class="qs-tabs">
+        <button class="qs-tab active" data-tab="tab-deploy">Deploy</button>
+        <button class="qs-tab" data-tab="tab-server">Server</button>
+        <button class="qs-tab" data-tab="tab-scan">Scan</button>
+        <button class="qs-tab" data-tab="tab-wireless">Wireless</button>
+      </div>
+      <div style="padding:24px;">
+        <div class="qs-panel active" id="tab-deploy">
+          <pre><code><span style="color:#64748b;"># Clone and bootstrap</span>
+git clone https://github.com/ozdemir-mehmet/portshim
+cd portshim
+python deploy.py
+
+<span style="color:#64748b;"># Optional: exploit framework (1GB+)</span>
+python deploy.py --with-msf</code></pre>
+        </div>
+        <div class="qs-panel" id="tab-server">
+          <pre><code><span style="color:#64748b;"># Start with Phase 1 model (Qwen3-Coder)</span>
+python portshim server start --model qwen3-coder-30b-a3b-instruct
+
+<span style="color:#64748b;"># Start with exploit model (SuperGemma4)</span>
+python portshim server start --model supergemma4-26b-uncensored
+
+<span style="color:#64748b;"># Server lifecycle</span>
+python portshim server status
+python portshim server restart --model qwen3-coder-30b-a3b-instruct
+python portshim server models
+python portshim server stop</code></pre>
+        </div>
+        <div class="qs-panel" id="tab-scan">
+          <pre><code><span style="color:#64748b;"># Discover reachable VLANs/subnets first</span>
+python portshim discover
+
+<span style="color:#64748b;"># Quick discovery — local subnet + VLAN list only</span>
+python portshim discover --fast
+
+<span style="color:#64748b;"># Deep discovery — full fingerprint + TCP SYN fallback</span>
+python portshim discover --deep
+
+<span style="color:#64748b;"># Save network map for later reference</span>
+python portshim discover --output network-map.json
+
+<span style="color:#64748b;"># One-command engagement</span>
+python portshim scan 10.0.0.0/22
+
+<span style="color:#64748b;"># Air-gapped mode (local LLM only)</span>
+python portshim scan 10.0.0.0/22 --mode local --engagement full-assault
+
+<span style="color:#64748b;"># Generate reports</span>
+python skills/site-assessment-pipeline/scripts/report-gen.py \
+  outputs/phase4-findings.json --output-dir outputs/reports --format all</code></pre>
+        </div>
+        <div class="qs-panel" id="tab-wireless">
+          <pre><code><span style="color:#64748b;"># Discover APs (safe mode — auto-fallback to iw dev scan)</span>
+portshim wireless scan
+
+<span style="color:#64748b;"># Full monitor mode scan (drops network)</span>
+portshim wireless scan --force --duration 30
+
+<span style="color:#64748b;"># Select targets interactively</span>
+portshim wireless select
+
+<span style="color:#64748b;"># Auto-select top 3 strongest APs</span>
+portshim wireless select --auto --max 3
+
+<span style="color:#64748b;"># Assess current status of selected targets</span>
+portshim wireless assess</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section id="faq">
+  <div class="container">
+    <span class="section-label">FAQ</span>
+    <h2 class="section-title">Common questions</h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-q">What makes PortShim different from other pentest frameworks?</button>
+        <div class="faq-a">PortShim is purpose-built for on-site, air-gapped operations. Instead of relying on cloud LLMs, it runs fully on a local GPU using llama.cpp. The 6-phase pipeline with per-phase model selection means you're never using a slow model for a fast task, and never using a censored model for an exploit phase.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Can I use cloud models instead of local ones?</button>
+        <div class="faq-a">Yes. PortShim supports a hybrid mode — use DeepSeek or another cloud API for reporting and CVE analysis, while keeping exploitation fully local to avoid API refusals on exploit-specific prompts. See <code>llm-config.py hybrid</code>.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">What models are recommended?</button>
+        <div class="faq-a">The benchmarked stack is: <strong>Qwen3-Coder 30B</strong> (recon &amp; CVE analysis, 447 PP tok/s), <strong>SuperGemma4 26B</strong> (exploitation &amp; reports, 525 PP tok/s), and <strong>HauhauCS 35B</strong> (alternative exploit, 481 PP tok/s). All are Q4_K_M (Q4_K_S for HauhauCS) GGUF files running on Vulkan at 16K context.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Is PortShim suitable for beginners?</button>
+        <div class="faq-a">PortShim is designed for authorised security professionals. You should be comfortable with nmap, basic exploitation concepts, and command-line tooling. The pipeline automates the heavy lifting, but operator judgement is required at every phase gate.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Can I use PortShim with an AI assistant?</button>
+        <div class="faq-a">Yes. PortShim is agent-agnostic — the <code>--force</code> flag and structured output work with any AI assistant. It pairs naturally with <a href="https://hermes-agent.nousresearch.com">Hermes Agent</a> for interactive phase-by-phase orchestration, and works equally well with Claude Code, Codex, OpenAI CLI, or custom agent workflows. The agent guides you from scope confirmation through to final retest, presents findings at each gate, and waits for your approval before advancing. Common workflows include:<br><br>
+        <strong>End-to-end assessment</strong> — Bootstrap via deploy.py, then hand off to the agent. It walks through network discovery, vulnerability correlation, and exploitation in a structured, auditable flow with operator decisions at every stage.<br><br>
+        <strong>Report-driven operations</strong> — After an assessment, the agent helps draft narrative executive summaries, populate remediation checklists, and generate multi-format deliverables from the raw findings — all while keeping you in the approval loop.<br><br>
+        <strong>Adversary-simulation scenarios</strong> — For red team exercises, the agent adapts stealth profiles and LLM modes between phases, supports wireless testing scope changes mid-engagement, and maintains an evidence trail suitable for after-action reviews.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Do I need internet access?</button>
+        <div class="faq-a">No. In fully-local mode, everything runs on your laptop — model inference, CVE database lookups (pre-synced), and report generation. Internet is only needed for initial model downloads and optional cloud API fallback.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">What does the "shim" mean?</button>
+        <div class="faq-a">A <strong>shim</strong> is a thin tool used in lockpicking to bypass wafer locks by sliding between the plug and the bible. In networking, a shim sits between layers to intercept or modify traffic. PortShim picks the network — hence the name.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Will wireless scanning drop my internet connection?</button>
+        <div class="faq-a">No — not by default. PortShim detects if your Wi-Fi adapter carries your internet connection and <strong>automatically uses managed mode</strong> (<code>iw dev scan</code>) to avoid disconnecting you. You get full AP discovery (SSIDs, BSSIDs, signal, encryption) without losing connectivity.<br><br>
+        If you specifically need monitor mode (for handshake capture or deauth), pass <code>--force</code>. A warning explains the trade-off before proceeding. After the operation, the interface is restored to managed mode and PortShim attempts to reconnect.<br><br>
+        For dedicated wireless testing without any risk to your network connection, <a href="pages/wireless.html#hardware-recommendations">connect an external USB adapter</a> — PortShim will prefer it automatically.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How do I benchmark a new model?</button>
+        <div class="faq-a">Download the GGUF file to <code>~/local-models/&lt;model-name&gt;/</code>, start the server, and run <code>python scripts/benchmark-models.py --local-only</code>. See the benchmark reference for details.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">Do I need a special Ethernet adapter for wired scanning?</button>
+        <div class="faq-a">Yes — do not scan a wired network over WiFi. ARP-based discovery won't work across the AP boundary. Any USB-to-Ethernet adapter works, but we recommend the <strong>Dell USB-C adapter (Realtek RTL8153)</strong> — it uses the in-kernel <code>r8152</code> driver with full hardware offload. The D-Link DUB-1312 (ASIX AX88179) is a good backup but verify it's on the <code>ax88179_178a</code> driver, not the generic <code>cdc_ncm</code>. Avoid scanning through USB-C dock Ethernet if possible — the shared DisplayLink bus causes packet drops under load.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="container">
+    <div class="socials">
+      <a href="#">Documentation</a>
+      <a href="#">GitHub</a>
+      <a href="#">Benchmarks</a>
+    </div>
+    <p>PortShim v0.5.11 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p style="margin-top:4px;"><a href="pages/changelog.html" style="color:var(--accent);">Changelog</a> · Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
+    <p style="margin-top:8px; font-size:0.75rem;"><a href="https://youtu.be/dQw4w9WgXcQ?autoplay=1" target="_blank" rel="noopener" style="color:#334155; text-decoration:none;">Cal-Met Corp Industries</a></p>
+  </div>
+</footer>
+
+<!-- ── Scripts ── -->
+<script>
+  // Hamburger
+  document.getElementById('hamburger').addEventListener('click', () => {
+    document.getElementById('navLinks').classList.toggle('open');
+  });
+  // Close nav on link click
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.addEventListener('click', () => document.getElementById('navLinks').classList.remove('open'));
+  });
+
+  // Quick Start tabs
+  document.querySelectorAll('.qs-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.qs-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.qs-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // FAQ accordion
+  document.querySelectorAll('.faq-q').forEach(q => {
+    q.addEventListener('click', () => {
+      const item = q.parentElement;
+      item.classList.toggle('open');
+    });
+  });
+
+  // ── Theme system ──
+  (function() {
+    const toggle = document.getElementById('themeToggle');
+    const STORAGE_KEY = 'portshim-theme';
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      toggle.textContent = theme === 'dark' ? '🌙' : '☀️';
+      try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
+    }
+
+    // Detect: saved preference → system preference → default dark
+    const saved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } })();
+    if (saved) {
+      setTheme(saved);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      setTheme('light');
+    } else {
+      setTheme('dark');
+    }
+
+    toggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      setTheme(current === 'light' ? 'dark' : 'light');
+    });
+  })();
+</script>
+</body>
+</html>

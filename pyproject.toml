@@ -1,0 +1,29 @@
+[project]
+name = "portshim"
+version = "1.0.0"
+description = "On-site security assessment pipeline — Hermes-orchestrated, distro-agnostic"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+report = [
+    "python-docx>=1.1",
+    "python-pptx>=1.0",
+    "openpyxl>=3.1",
+]
+core = [
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "fpdf2>=2.7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "network: tests requiring network access",
+    "smoke: full pipeline smoke tests",
+    "uat: user acceptance tests for wired pipeline",
+]

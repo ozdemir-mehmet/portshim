@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireless Assessment — PortShim</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f59e0b'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='bold' font-size='16' fill='%23020617'%3EPS%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0f; --bg-alt: #0f172a; --bg-card: #0a0a0f;
+      --text: #e2e8f0; --text-muted: #94a3b8; --text-dim: #64748b; --text-code: #e2e8f0;
+      --border: #1e293b; --border-light: #334155;
+      --accent: #f59e0b; --accent-hover: #fbbf24;
+      --code-bg: #1e293b; --code-block-bg: #0f172a;
+      --nav-bg: rgba(10,10,15,0.85); --nav-border: #1e293b;
+      --selection-bg: rgba(245,158,11,0.2); --selection-text: #fef08a;
+      --btn-secondary-text: #e2e8f0; --btn-secondary-hover: #1e293b;
+      --footer-border: #1e293b; --footer-text: #475569;
+      --toggle-bg: #1e293b; --toggle-hover: #334155;
+      --page-color: #10b981;
+    }
+    [data-theme="light"] {
+      --bg: #ffffff; --bg-alt: #f8fafc; --bg-card: #ffffff;
+      --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-code: #1e293b;
+      --border: #e2e8f0; --border-light: #cbd5e1;
+      --accent: #d97706; --accent-hover: #b45309;
+      --code-bg: #f1f5f9; --code-block-bg: #f8fafc;
+      --nav-bg: rgba(255,255,255,0.9); --nav-border: #e2e8f0;
+      --selection-bg: rgba(217,119,6,0.2); --selection-text: #78350f;
+      --btn-secondary-text: #0f172a; --btn-secondary-hover: #e2e8f0;
+      --footer-border: #e2e8f0; --footer-text: #94a3b8;
+      --toggle-bg: #e2e8f0; --toggle-hover: #cbd5e1;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden;
+      transition: background .25s, color .25s;
+    }
+    ::selection { background: var(--selection-bg); color: var(--selection-text); }
+    h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); }
+    h2 { font-size: clamp(1.3rem, 2.5vw, 1.8rem); margin-top: 40px; margin-bottom: 12px; color: var(--page-color); }
+    h3 { font-size: 1.15rem; margin-top: 28px; margin-bottom: 8px; }
+    p { color: var(--text-muted); margin-bottom: 16px; }
+    a { color: var(--accent); text-decoration: none; transition: color .2s; }
+    a:hover { color: var(--accent-hover); }
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--code-bg); color: var(--text-code); padding: 2px 6px;
+      border-radius: 4px; font-size: .85em;
+    }
+    pre code {
+      display: block; padding: 1rem 1.2rem; border-radius: 8px;
+      background: var(--code-block-bg); border: 1px solid var(--border);
+      overflow-x: auto; font-size: .82rem; line-height: 1.5;
+    }
+    ul, ol { color: var(--text-muted); margin-bottom: 16px; padding-left: 24px; }
+    li { margin-bottom: 6px; }
+    .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: var(--nav-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background .25s, border-color .25s;
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 60px;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Courier New', monospace; font-weight: 700; font-size: 1.1rem;
+      color: var(--accent);
+    }
+    .nav-back { font-size: .85rem; color: var(--text-muted); }
+    .nav-back:hover { color: var(--accent); }
+
+    .page-hero {
+      padding: 120px 0 60px; text-align: center;
+      background: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(16,185,129,0.08) 0%, transparent 70%);
+    }
+    .page-hero .icon { font-size: 3rem; margin-bottom: 16px; }
+    .page-hero h1 { margin-bottom: 12px; }
+    .page-hero p { font-size: 1.1rem; max-width: 640px; margin: 0 auto; }
+
+    .page-content { padding: 40px 0 80px; }
+
+    .theme-toggle {
+      width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--toggle-bg); color: var(--text);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; transition: all .2s; padding: 0;
+    }
+    .theme-toggle:hover { background: var(--toggle-hover); }
+
+    footer {
+      border-top: 1px solid var(--footer-border); padding: 40px 0; text-align: center;
+    }
+    footer p { font-size: .82rem; color: var(--footer-text); }
+    .footer-links { display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; }
+    .footer-links a { font-size: .85rem; color: var(--text-muted); }
+    .footer-links a:hover { color: var(--accent); }
+
+    .cap-table {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      background: var(--code-block-bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; margin-bottom: 16px; font-size: .88rem;
+    }
+    .cap-table .cap-label { color: var(--text-dim); }
+    .cap-table .cap-value { text-align: right; font-weight: 600; }
+
+    .pipeline-diagram {
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+      margin: 24px 0; padding: 16px; background: var(--code-block-bg);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    .pipeline-step {
+      flex: 1; min-width: 120px; text-align: center; padding: 12px 8px;
+      border-radius: 8px; font-size: .82rem; position: relative;
+    }
+    .pipeline-step.done { background: rgba(16,185,129,0.12); color: #10b981; }
+    .pipeline-step.future { background: var(--code-bg); color: var(--text-dim); }
+    .pipeline-step .step-num { font-size: .7rem; opacity: .6; }
+    .pipeline-step .step-label { font-weight: 600; }
+    .pipeline-arrow { display: flex; align-items: center; color: var(--text-dim); font-size: 1.2rem; }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <div class="nav-brand">⬡ PortShim</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <a href="../index.html" class="nav-back">← Back to Home</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+    </div>
+  </div>
+</nav>
+
+<section class="page-hero">
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>Wireless Assessment</h1>
+    <p>Discover, select, and assess wireless access points — all from managed mode without dropping your network connection.</p>
+  </div>
+</section>
+
+<section class="page-content">
+  <div class="container">
+
+<h2>Overview</h2>
+<p>PortShim's wireless assessment pipeline lets you discover nearby access points, select targets, and assess their current status — all without switching to monitor mode. This means you can survey the RF environment while keeping your own network connection active.</p>
+<p>For active attacks (handshake capture, deauthentication, cracking), monitor mode is required and the network disruption guard will warn you before proceeding.</p>
+
+<h2>Pipeline</h2>
+<div class="pipeline-diagram">
+  <div class="pipeline-step done">
+    <div class="step-num">1</div>
+    <div class="step-label">Scan</div>
+    <div style="font-size:.75rem;opacity:.7;">Discover APs</div>
+  </div>
+  <div class="pipeline-arrow">→</div>
+  <div class="pipeline-step done">
+    <div class="step-num">2</div>
+    <div class="step-label">Select</div>
+    <div style="font-size:.75rem;opacity:.7;">Pick targets</div>
+  </div>
+  <div class="pipeline-arrow">→</div>
+  <div class="pipeline-step done">
+    <div class="step-num">3</div>
+    <div class="step-label">Assess</div>
+    <div style="font-size:.75rem;opacity:.7;">Check status</div>
+  </div>
+  <div class="pipeline-arrow">→</div>
+  <div class="pipeline-step done">
+    <div class="step-num">4</div>
+    <div class="step-label">Capture</div>
+    <div style="font-size:.75rem;opacity:.7;">Handshakes</div>
+  </div>
+  <div class="pipeline-arrow">→</div>
+  <div class="pipeline-step done">
+    <div class="step-num">5</div>
+    <div class="step-label">Crack</div>
+    <div style="font-size:.75rem;opacity:.7;">PSK recovery</div>
+  </div>
+  <div class="pipeline-arrow">→</div>
+  <div class="pipeline-step done">
+    <div class="step-num">6</div>
+    <div class="step-label">Deauth</div>
+    <div style="font-size:.75rem;opacity:.7;">Client kick</div>
+  </div>
+</div>
+
+<p><strong>Green</strong> = implemented. All six phases are available now.</p>
+
+<h2>Phase 1 — Scan</h2>
+<p>Discover nearby access points with <code>portshim wireless scan</code>. <strong>An external USB WiFi adapter is required</strong> — internal WiFi is never used. The command auto-detects your external adapter, checks its capabilities (monitor mode, band support), and runs the best available scan.</p>
+
+<h3>Full mode (monitor)</h3>
+<p>With an external USB adapter, PortShim uses full airodump-ng with monitor mode and packet injection for the most detailed AP data. No network disruption — your internal WiFi handles connectivity while the external adapter does the scanning.</p>
+
+<h3>Examples</h3>
+<pre><code><span style="color:#64748b;"># Quick scan (requires external USB adapter)</span>
+portshim wireless scan
+
+<span style="color:#64748b;"># 30-second scan on 5 GHz band</span>
+portshim wireless scan --duration 30 --band 5
+
+<span style="color:#64748b;"># Force full monitor mode (drops network)</span>
+portshim wireless scan --force
+
+<span style="color:#64748b;"># Dry run — check hardware without scanning</span>
+portshim wireless scan --dry-run</code></pre>
+
+<h3>Output</h3>
+<p>Structured JSON is saved to <code>outputs/wireless/wireless-aps-{timestamp}.json</code> with scan metadata and a sorted list of access points by signal strength. Each AP includes SSID, BSSID, channel, encryption type, signal (dBm), and manufacturer info.</p>
+
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Field</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>scan_metadata</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Timestamp, interface, tool, mode (full/managed), band, duration</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>access_points[]</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Array of APs with SSID, BSSID, channel, encryption, signal_dbm, beacons, manufacturer</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Phase 2 — Select</h2>
+<p>After scanning, pick which APs to target with <code>portshim wireless select</code>. The command loads the most recent scan results and presents a numbered table sorted by signal strength.</p>
+
+<h3>Interactive mode</h3>
+<pre><code>portshim wireless select</code></pre>
+<p>Shows a numbered list of all detected APs. Enter selections like <code>1,3-5,7</code> or <code>all</code> to pick targets. Selection is saved to <code>outputs/wireless/targets-{timestamp}.json</code>.</p>
+
+<h3>Auto-select (agent-friendly)</h3>
+<pre><code><span style="color:#64748b;"># Auto-select top 5 strongest APs (prefers unique SSIDs)</span>
+portshim wireless select --auto
+
+<span style="color:#64748b;"># Top 3, agent-friendly</span>
+portshim wireless select --force --max 3
+
+<span style="color:#64748b;"># Just list, don't save</span>
+portshim wireless select --list</code></pre>
+
+<h2>Phase 3 — Assess</h2>
+<p>With targets selected, run <code>portshim wireless assess</code> to check their current status via a fresh managed-mode scan. No network disruption required.</p>
+
+<h3>What it reports</h3>
+<ul>
+  <li><strong>Visibility</strong> — Is the target still in range?</li>
+  <li><strong>Signal change</strong> — How much has the signal changed since the scan?</li>
+  <li><strong>Channel match</strong> — Has the AP moved channels?</li>
+  <li><strong>Encryption match</strong> — Has the encryption type changed?</li>
+  <li><strong>Association</strong> — Are you currently connected to this AP?</li>
+</ul>
+
+<pre><code><span style="color:#64748b;"># Assess latest targets (fresh iw scan)</span>
+portshim wireless assess
+
+<span style="color:#64748b;"># Use a specific targets file</span>
+portshim wireless assess --targets-file outputs/wireless/targets-20260706T103000Z.json
+
+<span style="color:#64748b;"># No fresh scan — use cached data only</span>
+portshim wireless assess --no-scan</code></pre>
+
+<h3>Assessment output</h3>
+<pre><code>═══ Assessment Results ═══
+  3 targets — 2 visible, 1 invisible, 1 associated
+
+  ◉ TESTAP  E2:62:79:B3:48:83
+    Signal:  -68 dBm ( -2)
+    Channel: 36
+    Enc:     WPA3-SAE
+
+  ○ TESTAP_EXT  D8:32:14:0C:5B:64
+    Signal:  -32 dBm ( -2)
+    Channel: 6
+    Enc:     WPA2-PSK
+
+  ✗ OPTUS_0593B0N  8C:83:94:05:93:B3
+    Target not visible in current scan
+    Last seen on ch 11 at -78 dBm</code></pre>
+
+<h2>Phase 4 — Capture</h2>
+<p>Once targets are selected and assessed, capture WPA/WPA2/WPA3 handshakes with <code>portshim wireless capture</code>. Requires monitor mode — you need a dedicated external USB adapter.</p>
+
+<h3>How it works</h3>
+<ul>
+  <li>Auto-detects your wireless adapter and checks monitor mode support</li>
+  <li>Targets all selected APs simultaneously via airodump-ng</li>
+  <li>Waits for clients to authenticate — deauth can speed this up (Phase 6)</li>
+  <li>Saves capture to <code>outputs/wireless/capture-{timestamp}-01.cap</code></li>
+  <li>Produces a structured JSON result with status, target count, and file metadata</li>
+</ul>
+
+<h3>Examples</h3>
+<pre><code><span style="color:#64748b;"># Capture handshakes from latest targets (60s default)</span>
+portshim wireless capture
+
+<span style="color:#64748b;"># 2-minute capture on a specific interface</span>
+portshim wireless capture --duration 120 --interface wlan1
+
+<span style="color:#64748b;"># Use a specific targets file</span>
+portshim wireless capture --targets-file outputs/wireless/targets-20260708T150400Z.json
+
+<span style="color:#64748b;"># Dry run — show plan without capturing</span>
+portshim wireless capture --dry-run</code></pre>
+
+<h2>Phase 5 — Crack</h2>
+<p>Attempt offline PSK recovery from captured handshakes with <code>portshim wireless crack</code>. Uses aircrack-ng by default with hashcat as an optional GPU-accelerated backend.</p>
+
+<h3>Backends</h3>
+<ul>
+  <li><strong>aircrack-ng</strong> (default) — CPU-based, always available, good for small wordlists</li>
+  <li><strong>hashcat</strong> — GPU-accelerated (AMD/Intel/NVIDIA), requires OpenCL or ROCm</li>
+  <li><strong>auto</strong> — selects hashcat if GPU detected, falls back to aircrack-ng</li>
+</ul>
+
+<h3>Examples</h3>
+<pre><code><span style="color:#64748b;"># Crack with default system wordlist</span>
+portshim wireless crack --cap outputs/wireless/capture-20260708T150500Z-01.cap
+
+<span style="color:#64748b;"># Custom wordlist</span>
+portshim wireless crack --cap capture.cap --wordlist /usr/share/wordlists/rockyou.txt
+
+<span style="color:#64748b;"># GPU-accelerated via hashcat</span>
+portshim wireless crack --cap capture.cap --backend hashcat
+
+<span style="color:#64748b;"># 10-minute timeout</span>
+portshim wireless crack --cap capture.cap --timeout 600</code></pre>
+
+<h3>Output</h3>
+<p>Saves structured JSON to <code>outputs/wireless/crack-result-{timestamp}.json</code> with the cracking outcome (success/failure/timeout), recovered PSK, target details, and backend used.</p>
+
+<h2>Phase 6 — Deauth</h2>
+<p>Force clients to disconnect from target APs with <code>portshim wireless deauth</code>. This triggers reconnection and re-authentication, producing fresh WPA handshakes for capture. Uses aireplay-ng to send deauthentication frames.</p>
+
+<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:16px;margin:16px 0;font-size:.88rem;">
+  <strong style="color:var(--accent);">⚠ Safety first</strong>
+  <p style="margin:8px 0 0;color:var(--text-muted);">Deauth is an active attack — it disrupts legitimate client connections. Only use against networks you own or have explicit authorization to test. PortShim requires <code>--force</code> to skip the confirmation prompt.</p>
+</div>
+
+<h3>Modes</h3>
+<ul>
+  <li><strong>Broadcast deauth</strong> — Kick all clients from all selected targets</li>
+  <li><strong>Targeted deauth</strong> — <code>--detect-clients</code> first discovers associated clients, then deauths them specifically</li>
+  <li><strong>Dry run</strong> — <code>--dry-run</code> shows the plan without sending any frames</li>
+</ul>
+
+<h3>Examples</h3>
+<pre><code><span style="color:#64748b;"># Deauth clients from latest targets (interactive)</span>
+portshim wireless deauth
+
+<span style="color:#64748b;"># Deauth with client discovery first</span>
+portshim wireless deauth --detect-clients
+
+<span style="color:#64748b;"># Send 10 deauth frames per target</span>
+portshim wireless deauth --count 10
+
+<span style="color:#64748b;"># Agent-friendly (skip all prompts)</span>
+portshim wireless deauth --force
+
+<span style="color:#64748b;"># Show plan only</span>
+portshim wireless deauth --dry-run</code></pre>
+
+<h3>Output</h3>
+<p>Saves structured JSON to <code>outputs/wireless/deauth-result-{timestamp}.json</code> with per-target client counts, interface used, and deauth count.</p>
+
+<h2>Network Disruption Guard</h2>
+<p>PortShim's wireless pipeline is designed to never surprise you with a dropped connection. Here's how it works:</p>
+<ul>
+  <li><strong>External only</strong> — All wireless operations require an external USB adapter. Internal WiFi is never touched.</li>
+  <li><strong>--force override</strong> — Skip interactive prompts for agent-friendly automation.</li>
+  <li><strong>Interface restoration</strong> — After any monitor mode operation, PortShim restores the interface to managed mode, unblocks NetworkManager, and attempts to reconnect to your Wi-Fi network.</li>
+  <li><strong>Agent-friendly</strong> — All prompts are skipped with <code>--force</code>, making the pipeline safe for AI-agent orchestration.</li>
+</ul>
+
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<p><strong>An external USB WiFi adapter is required.</strong> Internal laptop Wi-Fi adapters are never used — PortShim exits with a clear error if no external adapter is detected. This prevents accidental network disruption during testing.</p>
+<p>Recommended adapter:</p>
+
+<div class="cap-table">
+  <span class="cap-label">Chipset</span><span class="cap-value">RTL8812AU / RTL8814AU / RTL88x2BU</span>
+  <span class="cap-label">Example</span><span class="cap-value">Alfa AWUS036ACH (~$35)</span>
+  <span class="cap-label">Monitor mode</span><span class="cap-value" style="color:#10b981;">✓</span>
+  <span class="cap-label">Packet injection</span><span class="cap-value" style="color:#10b981;">✓</span>
+  <span class="cap-label">2.4 GHz</span><span class="cap-value" style="color:#10b981;">✓</span>
+  <span class="cap-label">5 GHz</span><span class="cap-value" style="color:#10b981;">✓</span>
+</div>
+
+<p>An external adapter appears as a <strong>second</strong> wireless interface (e.g. <code>wlan1</code>). PortShim requires an external adapter and uses it for full-mode scanning without disrupting your network connection on <code>wlan0</code>.</p>
+
+<h2>Agent Integration</h2>
+<p>The entire wireless pipeline is agent-friendly. It works with <a href="https://hermes-agent.nousresearch.com">Hermes Agent</a>, Claude Code, Codex, or any CLI-capable AI assistant. The <code>--force</code> flag skips all interactive prompts, allowing an agent to run the full scan → select → assess workflow autonomously while reporting status at each step.</p>
+<p>Since internal WiFi is never used, an agent can safely run wireless operations without risk of dropping the host's network connection.</p>
+
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="../index.html">Home</a>
+      <a href="https://github.com/ozdemir-mehmet/portshim">GitHub</a>
+      <a href="https://hermes-agent.nousresearch.com">Hermes Agent</a>
+    </div>
+    <p>PortShim v0.5.11 — Picking the network, one port at a time</p>
+  </div>
+</footer>
+
+<script>
+  // Theme toggle
+  const toggle = document.getElementById('themeToggle');
+  const html = document.documentElement;
+  const stored = localStorage.getItem('ps-theme');
+  if (stored) html.setAttribute('data-theme', stored);
+  toggle.textContent = html.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
+  toggle.addEventListener('click', () => {
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    toggle.textContent = next === 'light' ? '☀️' : '🌙';
+    localStorage.setItem('ps-theme', next);
+  });
+</script>
+
+</body>
+</html>
