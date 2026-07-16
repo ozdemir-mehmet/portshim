@@ -84,6 +84,23 @@ python portshim server stop          # Graceful shutdown
 python portshim server models        # List available GGUF files
 ```
 
+### Discover the network
+Use `portshim discover` to map all reachable VLANs and subnets before starting an engagement:
+
+```bash
+# Standard discovery — sweep + fingerprint + classify
+python portshim discover
+
+# Quick — local subnet + VLAN list only (~2 min)
+python portshim discover --fast
+
+# Deep — full sweep with TCP SYN fallback (~10 min)
+python portshim discover --deep
+
+# Save network map to file
+python portshim discover --output network-map.json
+```
+
 ### Run an engagement
 ```bash
 # One-command engagement start

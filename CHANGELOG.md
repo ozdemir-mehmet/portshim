@@ -2,6 +2,20 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.12] — 2026-07-17
+
+### Added
+- `portshim discover` subcommand — automatic VLAN/subnet discovery from the current machine
+  - Three depth modes: `--fast` (~2 min), default (~5 min), `--deep` (~10 min)
+  - VLAN hunting: probes gateway on adjacent subnet IPs to find all reachable segments
+  - Heuristic classification: identifies subnet purpose (Corporate LAN, Infrastructure, Printer, Camera, etc.) from port banners, MAC vendors, hostnames, and HTTP titles
+  - JSON output to stdout (pipe-friendly) + human-readable table to stderr
+  - `--output file.json` to save the network map
+- `vlan-subnet-discovery` Hermes skill — reusable manual workflow for the same task
+
+### Changed
+- Landing page Quick Start and README updated with `portshim discover` examples
+
 ## [v0.5.11] — 2026-07-14
 
 ### Fixed

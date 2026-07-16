@@ -20,6 +20,10 @@ Usage:
     portshim wireless crack --cap <file>               # Crack WPA handshakes
     portshim wireless deauth                           # Deauthenticate clients
 
+    portshim discover                                  # Find reachable VLANs/subnets
+    portshim discover --fast                           # Quick (~2 min)
+    portshim discover --deep                           # Full (~10 min)
+
     portshim --help                                    # Show all commands
 
 Environment:
@@ -567,6 +571,11 @@ def main():
               portshim server stop
               portshim server status
               portshim server models
+
+              portshim discover
+              portshim discover --fast
+              portshim discover --deep
+              portshim discover --output network-map.json
         """),
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -731,6 +740,36 @@ def main():
     server_sub.add_parser("status", help="Check server status")
     server_sub.add_parser("models", help="List available models")
 
+    # ── discover ──
+    discover = subparsers.add_parser(
+        "discover", help="Discover reachable VLANs/subnets",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""\
+            Examples:
+              portshim discover                   # Standard depth (default)
+              portshim discover --fast            # Quick (~2 min)
+              portshim discover --deep            # Full (~10 min)
+              portshim discover --interface eth0  # Explicit interface
+              portshim discover --output map.json # Save to file
+        """),
+    )
+    discover.add_argument(
+        "--fast", action="store_true",
+        help="Quick discovery: local subnet + VLAN list only (~2 min)",
+    )
+    discover.add_argument(
+        "--deep", action="store_true",
+        help="Deep discovery: full sweep + TCP SYN fallback (~10 min)",
+    )
+    discover.add_argument(
+        "--interface", default=None,
+        help="Network interface to use (auto-detect if not specified)",
+    )
+    discover.add_argument(
+        "--output", "-o", default=None,
+        help="Save network map JSON to file (also printed to stdout)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -856,6 +895,21 @@ def main():
             script_result = subprocess.run(cmd, timeout=120)
             sys.exit(script_result.returncode)
         return
+
+    # ── Discover ──
+    if args.command == "discover":
+        discover_script = str(SCRIPTS / "discover.py")
+        cmd = [sys.executable, discover_script]
+        if args.fast:
+            cmd.append("--fast")
+        if args.deep:
+            cmd.append("--deep")
+        if args.interface:
+            cmd.extend(["--interface", args.interface])
+        if args.output:
+            cmd.extend(["--output", args.output])
+        script_result = subprocess.run(cmd, timeout=600)  # 10 min max
+        sys.exit(script_result.returncode)
 
     # ── Scan ──
     # ── Deprecation warning for --wireless ──
