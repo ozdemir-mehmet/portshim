@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>External Tool Dependencies — PortShim</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f59e0b'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-weight='bold' font-size='16' fill='%23020617'%3EPS%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0f; --bg-alt: #0f172a; --bg-card: #0a0a0f;
+      --text: #e2e8f0; --text-muted: #94a3b8; --text-dim: #64748b; --text-code: #e2e8f0;
+      --border: #1e293b; --border-light: #334155;
+      --accent: #f59e0b; --accent-hover: #fbbf24;
+      --code-bg: #1e293b; --code-block-bg: #0f172a;
+      --nav-bg: rgba(10,10,15,0.85); --nav-border: #1e293b;
+      --selection-bg: rgba(245,158,11,0.2); --selection-text: #fef08a;
+      --btn-secondary-text: #e2e8f0; --btn-secondary-hover: #1e293b;
+      --footer-border: #1e293b; --footer-text: #475569;
+      --toggle-bg: #1e293b; --toggle-hover: #334155;
+      --page-color: #8b5cf6;
+    }
+    [data-theme="light"] {
+      --bg: #ffffff; --bg-alt: #f8fafc; --bg-card: #ffffff;
+      --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-code: #1e293b;
+      --border: #e2e8f0; --border-light: #cbd5e1;
+      --accent: #d97706; --accent-hover: #b45309;
+      --code-bg: #f1f5f9; --code-block-bg: #f8fafc;
+      --nav-bg: rgba(255,255,255,0.9); --nav-border: #e2e8f0;
+      --selection-bg: rgba(217,119,6,0.2); --selection-text: #78350f;
+      --btn-secondary-text: #0f172a; --btn-secondary-hover: #e2e8f0;
+      --footer-border: #e2e8f0; --footer-text: #94a3b8;
+      --toggle-bg: #e2e8f0; --toggle-hover: #cbd5e1;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden;
+      transition: background .25s, color .25s;
+    }
+    ::selection { background: var(--selection-bg); color: var(--selection-text); }
+    h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); }
+    h2 { font-size: clamp(1.3rem, 2.5vw, 1.8rem); margin-top: 40px; margin-bottom: 12px; color: var(--page-color); }
+    h3 { font-size: 1.15rem; margin-top: 28px; margin-bottom: 8px; }
+    p { color: var(--text-muted); margin-bottom: 16px; }
+    a { color: var(--accent); text-decoration: none; transition: color .2s; }
+    a:hover { color: var(--accent-hover); }
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--code-bg); color: var(--text-code); padding: 2px 6px;
+      border-radius: 4px; font-size: .85em;
+    }
+    pre code {
+      display: block; padding: 1rem 1.2rem; border-radius: 8px;
+      background: var(--code-block-bg); border: 1px solid var(--border);
+      overflow-x: auto; font-size: .82rem; line-height: 1.5;
+    }
+    ul, ol { color: var(--text-muted); margin-bottom: 16px; padding-left: 24px; }
+    li { margin-bottom: 6px; }
+    .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: var(--nav-bg); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background .25s, border-color .25s;
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between; height: 60px;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Courier New', monospace; font-weight: 700; font-size: 1.1rem;
+      color: var(--accent);
+    }
+    .nav-back { font-size: .85rem; color: var(--text-muted); }
+    .nav-back:hover { color: var(--accent); }
+
+    .page-hero {
+      padding: 120px 0 60px; text-align: center;
+      background: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(139,92,246,0.08) 0%, transparent 70%);
+    }
+    .page-hero .icon { font-size: 3rem; margin-bottom: 16px; }
+    .page-hero h1 { margin-bottom: 12px; }
+    .page-hero p { font-size: 1.1rem; max-width: 640px; margin: 0 auto; }
+
+    .page-content { padding: 40px 0 80px; }
+
+    .theme-toggle {
+      width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--toggle-bg); color: var(--text);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; transition: all .2s; padding: 0;
+    }
+    .theme-toggle:hover { background: var(--toggle-hover); }
+
+    footer {
+      border-top: 1px solid var(--footer-border); padding: 40px 0; text-align: center;
+    }
+    footer p { font-size: .82rem; color: var(--footer-text); }
+    .footer-links { display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; }
+    .footer-links a { font-size: .85rem; color: var(--text-muted); }
+    .footer-links a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="container">
+    <div class="nav-brand">⬡ PortShim</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <a href="../index.html" class="nav-back">← Back to Home</a>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
+    </div>
+  </div>
+</nav>
+
+<section class="page-hero">
+  <div class="container">
+    <div class="icon">🧰</div>
+    <h1>External Tool Dependencies</h1>
+    <p>Every tool PortShim shells out to — what it is, which phase uses it, what's required versus optional, and what stops working when it's absent.</p>
+  </div>
+</section>
+
+<section class="page-content">
+  <div class="container">
+
+<h2>Overview</h2>
+<p>PortShim orchestrates established security tooling rather than reimplementing it. The inventory of what gets <em>installed</em> comes from <code>deploy.py</code>; the "used by" column comes from the code that actually invokes each binary. Some tools are installed and configured but run by the AI agent following its skill instructions rather than by any script — those rows are marked <strong>Agent</strong>.</p>
+
+<p>Tags mark how a tool is driven. A row carrying <strong>no</strong> tag is invoked directly by PortShim's own code — the core pipeline table is entirely runtime, so none of its rows are tagged, and a table in a section that is itself dedicated to agent-driven tools carries no per-row tag either. The "If missing" column states the real consequence — graded <strong>Hard stop</strong> / <strong>Degrades</strong> / <strong>No effect</strong> where the impact varies, and naming what stops working where a whole module depends on the tool.</p>
+
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tag</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><strong>Agent</strong></td>
+      <td style="padding:8px;color:var(--text-muted);">Installed and configured, run by the AI agent per its skill — no code invocation</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><strong>Optional</strong></td>
+      <td style="padding:8px;color:var(--text-muted);">Needed for one mode or module only</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Core pipeline</h2>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tool</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">What it is</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Why PortShim uses it</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">If missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>nmap</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Port scanner and NSE script host</td>
+      <td style="padding:8px;color:var(--text-muted);">Host discovery, subnet sweeps, service/version fingerprinting, and the CVE input for Phase 2</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Hard stop</strong> — there is no substitute</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>ip</code> (iproute2)</td>
+      <td style="padding:8px;color:var(--text-muted);">Interface and routing table inspection</td>
+      <td style="padding:8px;color:var(--text-muted);">Determines local subnets and the default gateway before sweeping</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Degrades</strong> — subnet discovery degrades; gateways go unidentified</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>curl</code></td>
+      <td style="padding:8px;color:var(--text-muted);">HTTP client</td>
+      <td style="padding:8px;color:var(--text-muted);">HTTP fingerprinting and target reachability checks</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Degrades</strong> — HTTP probing is skipped</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>python3</code> ≥ 3.10</td>
+      <td style="padding:8px;color:var(--text-muted);">Runtime</td>
+      <td style="padding:8px;color:var(--text-muted);">Everything. PEP 668 distros require a virtualenv</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Hard stop</strong></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>git</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Version control</td>
+      <td style="padding:8px;color:var(--text-muted);">Cloning the nmap-vulners NSE script; cloning PortShim itself</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Degrades</strong> — nmap-vulners install unavailable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>masscan</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Asynchronous port scanner</td>
+      <td style="padding:8px;color:var(--text-muted);">Fast host discovery on large ranges — seconds instead of minutes</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Degrades</strong> — falls back to <code>nmap -sn</code> automatically</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>go</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Go toolchain</td>
+      <td style="padding:8px;color:var(--text-muted);">Compiling and installing nuclei, httpx and subfinder</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Degrades</strong> — the Go tools cannot be installed</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>pip</code> + <code>python3-venv</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Python packaging and virtualenv</td>
+      <td style="padding:8px;color:var(--text-muted);">Installing the Python dependencies into a venv — PEP 668 distros refuse system-level installs</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Hard stop</strong> — the Python dependencies cannot be installed</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>nodejs</code> + <code>npm</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Node runtime</td>
+      <td style="padding:8px;color:var(--text-muted);">Installing the Anthropic Cybersecurity Skills layer the agent works from (<code>npx skills add …</code>)</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Degrades</strong> — the agent skill layer cannot be installed</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Optional — rendering only</h2>
+<p>Installed by <code>deploy.py</code>, but no code path invokes it and no pipeline output depends on it.</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tool</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">What it is</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Used by</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">If missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>graphviz</code> (<code>dot</code>)</td>
+      <td style="padding:8px;color:var(--text-muted);">DOT renderer</td>
+      <td style="padding:8px;color:var(--text-muted);">Not invoked — <code>topology.py --dot</code> <em>emits</em> DOT text; rendering the image is a manual step</td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>No effect</strong> — no diagram image; the DOT text output is unchanged</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Local LLM</h2>
+<p>Required for <code>--mode local</code>. Used opportunistically in <code>--mode hybrid</code>, which falls back to the cloud LLM if it is absent.</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tool</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">What it is</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Why PortShim uses it</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">If missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>llama-server</code> (b9870+)</td>
+      <td style="padding:8px;color:var(--text-muted);">Local inference server</td>
+      <td style="padding:8px;color:var(--text-muted);">Local model inference for recon/CVE analysis and exploit reasoning — the air-gapped path</td>
+      <td style="padding:8px;color:var(--text-muted);">Local mode unavailable; hybrid falls back to the cloud LLM</td>
+    </tr>
+  </tbody>
+</table>
+<p>Model weights are a separate dependency — the three GGUF files under <code>~/local-models/</code>, or wherever <code>PD_MODELS_DIR</code> points. See the <a href="airgap.html">air-gapped operations</a> page.</p>
+
+<h2>Wireless assessment</h2>
+<p>Used by <code>portshim wireless …</code>. An <strong>external USB adapter is required</strong> — the internal Wi-Fi interface is never used.</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tool</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">What it is</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Why PortShim uses it</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">If missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>iw</code></td>
+      <td style="padding:8px;color:var(--text-muted);">nl80211 interface control</td>
+      <td style="padding:8px;color:var(--text-muted);">Interface enumeration, capability probing, managed-mode scans, association checks</td>
+      <td style="padding:8px;color:var(--text-muted);">Wireless module unusable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>nmcli</code></td>
+      <td style="padding:8px;color:var(--text-muted);">NetworkManager client</td>
+      <td style="padding:8px;color:var(--text-muted);">Detects NetworkManager interference before capture</td>
+      <td style="padding:8px;color:var(--text-muted);">Interference detection skipped — captures may fail</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>airmon-ng</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Monitor-mode management</td>
+      <td style="padding:8px;color:var(--text-muted);">Enables monitor mode</td>
+      <td style="padding:8px;color:var(--text-muted);">No capture possible</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>airodump-ng</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Passive wireless capture</td>
+      <td style="padding:8px;color:var(--text-muted);">AP discovery and handshake capture</td>
+      <td style="padding:8px;color:var(--text-muted);">Scan and capture fail</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>aireplay-ng</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Frame injection</td>
+      <td style="padding:8px;color:var(--text-muted);">Targeted deauth to force a handshake</td>
+      <td style="padding:8px;color:var(--text-muted);">Deauth unavailable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>aircrack-ng</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Wireless protocol cracking</td>
+      <td style="padding:8px;color:var(--text-muted);">WEP/PSK cracking and capture verification</td>
+      <td style="padding:8px;color:var(--text-muted);">Cracking unavailable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hcxdumptool</code></td>
+      <td style="padding:8px;color:var(--text-muted);">PMKID capture</td>
+      <td style="padding:8px;color:var(--text-muted);">Capture path that survives PMF-protected networks</td>
+      <td style="padding:8px;color:var(--text-muted);">PMKID route unavailable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hcxpcapngtool</code></td>
+      <td style="padding:8px;color:var(--text-muted);">pcapng → hashcat/john converter</td>
+      <td style="padding:8px;color:var(--text-muted);">Converts captures into crackable hash files</td>
+      <td style="padding:8px;color:var(--text-muted);">No cracking input</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>macchanger</code></td>
+      <td style="padding:8px;color:var(--text-muted);">MAC address spoofing</td>
+      <td style="padding:8px;color:var(--text-muted);">Operator identity hygiene</td>
+      <td style="padding:8px;color:var(--text-muted);">Adapters retain their real MAC</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hashcat</code></td>
+      <td style="padding:8px;color:var(--text-muted);">GPU-accelerated cracking</td>
+      <td style="padding:8px;color:var(--text-muted);">Candidate and wordlist attacks against captured handshakes</td>
+      <td style="padding:8px;color:var(--text-muted);">Cracking unavailable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>john</code></td>
+      <td style="padding:8px;color:var(--text-muted);">CPU cracking</td>
+      <td style="padding:8px;color:var(--text-muted);">Fallback when there is no usable GPU</td>
+      <td style="padding:8px;color:var(--text-muted);">No GPU-less fallback</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hashid</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Hash type identification</td>
+      <td style="padding:8px;color:var(--text-muted);">Identifies the hash format inside a capture before cracking</td>
+      <td style="padding:8px;color:var(--text-muted);">Hash type auto-detection skipped</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Exploit phase</h2>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tool</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Role</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">If missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>searchsploit</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Maps verified CVEs to public exploits from the local Exploit-DB</td>
+      <td style="padding:8px;color:var(--text-muted);">Findings carry no exploit references</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hydra</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Agent</strong> — credential testing during Phase 3</td>
+      <td style="padding:8px;color:var(--text-muted);">Phase 3 credential checks unavailable</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>sshpass</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><strong>Agent</strong> — non-interactive SSH work during Phase 3</td>
+      <td style="padding:8px;color:var(--text-muted);">Interactive prompts block automated SSH</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Installed and configured, but agent-driven</h2>
+<p>These are installed by <code>deploy.py</code> and configured per engagement profile, but no PortShim script invokes them. The AI agent runs them following the <code>site-assessment-pipeline</code> skill, and <code>engagement-profiles.py</code> supplies the per-profile flags.</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Tool</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">What it is</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">If missing</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>nuclei</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Template-based vulnerability scanner; flags set per stealth profile</td>
+      <td style="padding:8px;color:var(--text-muted);">Phase 2 relies on nmap-vulners CVE data alone</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>httpx</code></td>
+      <td style="padding:8px;color:var(--text-muted);">HTTP probing to JSON; <code>topology.py --httpx</code> consumes its output</td>
+      <td style="padding:8px;color:var(--text-muted);">Topology loses HTTP titles and tech-stack data</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>subfinder</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Subdomain enumeration — credited upstream and installed, but no flags configured and no invocation anywhere in the repo</td>
+      <td style="padding:8px;color:var(--text-muted);">No effect on internal LAN engagements</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>metasploit</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Exploit framework — opt-in via <code>deploy.py --with-msf</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Phase 3 verification limited to manual techniques</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>kismet</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Wireless IDS / passive capture — skill reference only</td>
+      <td style="padding:8px;color:var(--text-muted);">No effect</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Not a dependency</h2>
+<p><code>tshark</code> and <code>tcpdump</code> are <strong>not</strong> used anywhere in the codebase. Packet capture for protocol-level exploit verification is an open feature request, tracked as issue #42 on the repository.</p>
+
+<h2>Python packages</h2>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Package</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Import name</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Used for</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>python-docx</code></td>
+      <td style="padding:8px;"><code>docx</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Technical report (.docx)</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>python-pptx</code></td>
+      <td style="padding:8px;"><code>pptx</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Executive deck (.pptx)</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>openpyxl</code></td>
+      <td style="padding:8px;"><code>openpyxl</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Remediation checklist and retest diff (.xlsx)</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>pyyaml</code></td>
+      <td style="padding:8px;"><code>yaml</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Knowledge-source manifests</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hashid</code></td>
+      <td style="padding:8px;">—</td>
+      <td style="padding:8px;color:var(--text-muted);">Provides the <code>hashid</code> binary used by the wireless cracker</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>Pillow</code>, <code>numpy</code></td>
+      <td style="padding:8px;"><code>PIL</code>, <code>numpy</code></td>
+      <td style="padding:8px;color:var(--text-muted);">Video pipeline — <strong>not installed by <code>deploy.py</code></strong> (gap 1 below)</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>requests</code>, <code>fpdf2</code>, <code>paramiko</code></td>
+      <td style="padding:8px;">—</td>
+      <td style="padding:8px;color:var(--text-muted);">Installed, but never imported by any file (gap 4 below)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Package → binary map</h2>
+<p>Several packages provide the binaries the code invokes.</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.85rem;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:8px;color:var(--accent);">Package</th>
+      <th style="text-align:left;padding:8px;color:var(--accent);">Provides</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>aircrack-ng</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><code>aircrack-ng</code>, <code>airmon-ng</code>, <code>airodump-ng</code>, <code>aireplay-ng</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hcxtools</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><code>hcxpcapngtool</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>hcxdumptool</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><code>hcxdumptool</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>exploitdb</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><code>searchsploit</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>graphviz</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><code>dot</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px;"><code>iproute2</code>, <code>curl</code></td>
+      <td style="padding:8px;color:var(--text-muted);"><code>ip</code>, <code>curl</code> — invoked but not installed by <code>deploy.py</code> (gap 3)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Known gaps</h2>
+<p>Recorded rather than worked around. None of these block the core pipeline.</p>
+<ol>
+  <li><strong>Pillow and numpy are undeclared.</strong> The video scripts import them, but they are in neither <code>deploy.py</code> nor <code>pyproject.toml</code>, so a fresh deploy cannot run the video pipeline.</li>
+  <li><strong>ffmpeg is undeclared.</strong> The video scripts invoke it directly; <code>deploy.py</code> does not install it.</li>
+  <li><strong><code>curl</code> and <code>iproute2</code> are invoked but not installed.</strong> Both are near-universal on Linux desktops, so this is a documentation gap more than a functional one.</li>
+  <li><strong><code>requests</code>, <code>fpdf2</code> and <code>paramiko</code> are installed but never imported</strong> by any file in the tree.</li>
+  <li><strong><code>subfinder</code> is documented but unused.</strong> It is credited upstream and installed by <code>deploy.py</code>; no script invokes it and no profile configures it.</li>
+  <li><strong><code>graphviz</code> is installed, but only DOT text is produced.</strong> It matters only if you render the diagram yourself.</li>
+  <li><strong>The preflight check covers four tools only</strong> — <code>nmap</code>, <code>nuclei</code>, <code>httpx</code>, <code>llama-server</code>. Everything else fails at first use, mid-phase.</li>
+</ol>
+
+<h2>Verification</h2>
+<p>Check what is present on your host:</p>
+<pre><code># Core + tools installed by deploy.py
+which nmap ip curl git masscan
+which llama-server iw nmcli airmon-ng airodump-ng aireplay-ng aircrack-ng \
+      hcxdumptool hcxpcapngtool macchanger hashcat john hashid searchsploit hydra sshpass \
+      nuclei httpx subfinder msfconsole kismet
+
+# Python packages actually importable
+.venv/bin/python -c "import openpyxl, docx, pptx, yaml, PIL, numpy; print('OK')"
+# note: the module is `fpdf`, not `fpdf2`
+
+# Knowledge sources pinned and fresh
+.venv/bin/python scripts/check-skill-freshness.py</code></pre>
+
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="../index.html">Home</a>
+      <a href="https://github.com/ozdemir-mehmet/portshim">GitHub</a>
+      <a href="https://hermes-agent.nousresearch.com">Hermes Agent</a>
+    </div>
+    <p>PortShim v0.5.12 — Picking the network, one port at a time</p>
+  </div>
+</footer>
+
+<script>
+  // Theme toggle
+  const toggle = document.getElementById('themeToggle');
+  const html = document.documentElement;
+  const stored = localStorage.getItem('ps-theme');
+  if (stored) html.setAttribute('data-theme', stored);
+  toggle.textContent = html.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
+  toggle.addEventListener('click', () => {
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    toggle.textContent = next === 'light' ? '☀️' : '🌙';
+    localStorage.setItem('ps-theme', next);
+  });
+</script>
+
+</body>
+</html>

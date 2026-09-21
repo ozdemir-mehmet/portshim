@@ -1,0 +1,115 @@
+% letter.latex — Pandoc template with PortShim styling
+% Colors: #CC4141 (accent red), #333333 (dark gray), #797979 (medium gray), #AAAAAA (light gray)
+% Fonts: Helvetica (sans-serif), clean style
+
+\documentclass[11pt,a4paper]{article}
+
+% ── Packages ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[margin=22mm,top=20mm,bottom=22mm]{geometry}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{setspace}
+\setstretch{1.1}
+
+% ── Brand Colors ──
+\definecolor{accentred}{HTML}{CC4141}
+\definecolor{dark}{HTML}{333333}
+\definecolor{medgray}{HTML}{797979}
+\definecolor{lightgray}{HTML}{AAAAAA}
+\definecolor{offwhite}{HTML}{F5F5F5}
+
+% ── Page style ──
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{medgray}{\footnotesize $title$ \hspace{0.5em}|\hspace{0.5em} $document$}}
+\fancyfoot[L]{\textcolor{medgray}{\footnotesize $title$ — $classification$}}
+\fancyfoot[R]{\textcolor{medgray}{\footnotesize Page \thepage\ of \pageref{LastPage}}}
+\renewcommand{\headrulewidth}{0pt}
+% Red bar at top
+\AddToHook{begindocument/end}{\textcolor{accentred}{\rule{\textwidth}{3pt}}\vspace{4pt}}
+
+% ── Section headings ──
+\titleformat{\section}
+  {\color{dark}\Large\bfseries}
+  {}{0em}
+  {}[\vspace{-0.5em}\textcolor{accentred}{\rule{\textwidth}{1.5pt}}]
+
+\titleformat{\subsection}
+  {\color{dark}\large\bfseries}
+  {}{0em}
+  {}
+
+% ── Lists ──
+\setlist{nosep,leftmargin=*}
+
+% ── Tables ──
+\renewcommand{\arraystretch}{1.2}
+
+% ── Hyperlinks ──
+\hypersetup{
+  colorlinks=true,
+  linkcolor=accentred,
+  urlcolor=accentred,
+}
+
+% ── Title block (suppress default) ──
+\makeatletter
+\renewcommand{\maketitle}{}
+\makeatother
+
+\begin{document}
+
+% ── Cover Page ──
+\thispagestyle{empty}
+
+\begin{center}
+\vspace*{4em}
+
+\textcolor{accentred}{\rule{56mm}{2pt}}
+
+\vspace{1.2em}
+{\fontsize{36}{42}\bfseries\color{dark}PROJECT}
+
+\vspace{0.2em}
+{\fontsize{36}{42}\bfseries\color{dark}PORTSHIM}
+
+\vspace{1.2em}
+{\Large\color{medgray}$subtitle$}
+
+\vspace{3em}
+
+\begin{tabular}{r l}
+\textcolor{accentred}{\textbf{Version}}      & $version$ \\
+\textcolor{accentred}{\textbf{Date}}         & $date$ \\
+\textcolor{accentred}{\textbf{Classification}} & $classification$ \\
+\textcolor{accentred}{\textbf{Platform}}     & $platform$ \\
+\textcolor{accentred}{\textbf{License}}      & $license$ \\
+\end{tabular}
+
+\vfill
+\textcolor{accentred}{\rule{\textwidth}{3pt}}
+\end{center}
+
+\newpage
+
+% ── Content ──
+$body$
+
+\vfill
+\begin{center}
+\colorbox{accentred}{\textcolor{white}{\bfseries\large\phantom{x}PortShim is ready for authorized deployment.\phantom{x}}}
+
+\vspace{0.3em}
+{\small\color{medgray}Run \texttt{deploy.py} on the target Linux machine to bootstrap the full capability.}
+\end{center}
+
+\end{document}

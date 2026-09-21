@@ -1,0 +1,43 @@
+name: Enforce PR Gate
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # Skip for you (admin) and for the bot itself (prevents infinite revert loops)
+    if: github.actor != 'ozdemir-mehmet' && github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect merge type
+        id: detect
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -qE '^Merge pull request #[0-9]+'; then
+            echo "is_pr_merge=true" >> "$GITHUB_OUTPUT"
+            echo "PR merge detected — allowing."
+          else
+            echo "is_pr_merge=false" >> "$GITHUB_OUTPUT"
+            echo "DIRECT PUSH detected — will revert."
+          fi
+
+      - name: Revert direct push
+        if: steps.detect.outputs.is_pr_merge == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "Reverting direct push by ${{ github.actor }}..."
+          git revert HEAD --no-edit
+          git push origin main
+
+          echo "::notice::Direct push to main by @${{ github.actor }} was reverted. Use a pull request to merge into main."
