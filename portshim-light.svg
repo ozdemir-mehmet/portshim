@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="648" height="683" viewBox="3 13 648 683" font-family="'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- metallic body -->
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4f7f9"/>
+      <stop offset=".18" stop-color="#e4eaee"/>
+      <stop offset=".5" stop-color="#c7d0d6"/>
+      <stop offset=".82" stop-color="#dbe2e7"/>
+      <stop offset="1" stop-color="#aeb9c0"/>
+    </linearGradient>
+    <linearGradient id="steelEdge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#98a4ac"/>
+      <stop offset=".12" stop-color="#eef2f5"/>
+      <stop offset=".5" stop-color="#c9d2d8"/>
+      <stop offset=".88" stop-color="#eef2f5"/>
+      <stop offset="1" stop-color="#98a4ac"/>
+    </linearGradient>
+    <!-- shackle cyan -->
+    <linearGradient id="shackle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b7fa6"/>
+      <stop offset=".5" stop-color="#38e6ff"/>
+      <stop offset="1" stop-color="#0b7fa6"/>
+    </linearGradient>
+    <!-- dark inner panel -->
+    <radialGradient id="panel" cx=".5" cy=".42" r=".75">
+      <stop offset="0" stop-color="#123244"/>
+      <stop offset=".55" stop-color="#0c2231"/>
+      <stop offset="1" stop-color="#061520"/>
+    </radialGradient>
+    <!-- keyhole glow -->
+    <radialGradient id="coreGlow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#bff7ff"/>
+      <stop offset=".35" stop-color="#2fd4f5"/>
+      <stop offset="1" stop-color="#2fd4f5" stop-opacity="0"/>
+    </radialGradient>
+    <!-- red probe -->
+    <linearGradient id="probe" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff6b8a"/>
+      <stop offset=".35" stop-color="#e11d48"/>
+      <stop offset="1" stop-color="#7c1030"/>
+    </linearGradient>
+    <linearGradient id="probeHi" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd0da"/>
+      <stop offset="1" stop-color="#ff5c7e" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#5b6b76" flood-opacity=".35"/>
+    </filter>
+  </defs>
+
+  <!-- ================= SHACKLE ================= -->
+  <g filter="url(#glow)">
+    <path fill="url(#shackle)" d="M206 300 V182 a124 124 0 0 1 248 0 V300 h-40 V182 a84 84 0 0 0 -168 0 V300 Z"/>
+  </g>
+  <!-- circuit traces on shackle -->
+  <g fill="none" stroke="#d6fbff" stroke-width="3" stroke-linecap="round" opacity=".92">
+    <path d="M244 300 V210 a86 86 0 0 1 24 -52"/>
+    <path d="M330 158 a90 90 0 0 0 -70 40"/>
+    <path d="M330 158 a90 90 0 0 1 74 46"/>
+    <path d="M416 300 V214 a88 88 0 0 0 -20 -50"/>
+    <path d="M300 300 V236"/>
+    <path d="M360 300 V236"/>
+  </g>
+  <g fill="#eafcff">
+    <circle cx="244" cy="300" r="5"/><circle cx="268" cy="158" r="5"/>
+    <circle cx="330" cy="158" r="5"/><circle cx="404" cy="204" r="5"/>
+    <circle cx="416" cy="300" r="5"/><circle cx="300" cy="236" r="4"/>
+    <circle cx="360" cy="236" r="4"/><circle cx="260" cy="198" r="4"/>
+  </g>
+
+  <!-- ================= BODY ================= -->
+  <g filter="url(#drop)">
+    <rect x="176" y="196" width="308" height="256" rx="34" fill="url(#steel)"/>
+    <rect x="176" y="196" width="308" height="256" rx="34" fill="none" stroke="url(#steelEdge)" stroke-width="6"/>
+  </g>
+
+  <!-- inner dark panel with stepped bottom notch -->
+  <path fill="url(#panel)" stroke="#2c4a5c" stroke-width="3"
+        d="M250 236 H410 V352 h-24 v22 h-22 v22 h-48 v-22 h-22 v-22 h-24 Z"/>
+
+  <!-- vertical circuit feeds -->
+  <g stroke="#3fe0ff" stroke-width="4" stroke-linecap="round" filter="url(#glow)">
+    <line x1="272" y1="248" x2="272" y2="300"/>
+    <line x1="296" y1="248" x2="296" y2="312"/>
+    <line x1="320" y1="248" x2="320" y2="316"/>
+    <line x1="344" y1="248" x2="344" y2="316"/>
+    <line x1="368" y1="248" x2="368" y2="312"/>
+    <line x1="392" y1="248" x2="392" y2="300"/>
+  </g>
+
+  <!-- keyhole glow + keyhole -->
+  <circle cx="330" cy="330" r="62" fill="url(#coreGlow)" filter="url(#softGlow)"/>
+  <path fill="#04121b" d="M330 300 a20 20 0 0 1 12 36 l8 40 h-40 l8 -40 a20 20 0 0 1 12 -36 Z"/>
+  <circle cx="330" cy="320" r="17" fill="none" stroke="#8ff0ff" stroke-width="3" opacity=".8"/>
+
+  <!-- ================= RED BLADE (tip inserted into keyhole) ================= -->
+  <g transform="translate(-16 -21)" filter="url(#drop)">
+    <path fill="url(#probe)"   d="M566 120 L602 132 L356 348 L336 334 Z"/>
+    <path fill="url(#probeHi)" d="M566 120 L602 132 L470 250 L452 230 Z"/>
+    <path fill="#5e0c24"       d="M356 348 L336 334 L344 328 L362 342 Z"/>
+  </g>
+
+  <!-- ================= WORDMARK ================= -->
+  <text x="331" y="544" text-anchor="end"   font-size="96" font-weight="900" fill="#3c4c57">PORT</text>
+  <text x="329" y="544" text-anchor="start" font-size="96" font-weight="900" fill="#26bdef">SHIM</text>
+  <text x="330" y="594" text-anchor="middle" font-size="29" font-weight="800"
+        letter-spacing="1.5" fill="#5c6b75">AIR-GAPPED PENTEST PIPELINE</text>
+
+  <!-- chip icon + LLM-POWERED (centered as a unit) -->
+  <g transform="translate(185,618)" stroke="#5c6b75" stroke-width="2.4" fill="none">
+    <rect x="0" y="0" width="26" height="26" rx="4"/>
+    <rect x="7" y="7" width="12" height="12" rx="2" fill="#5c6b75" stroke="none"/>
+    <g stroke-linecap="round">
+      <line x1="8" y1="-6" x2="8" y2="0"/><line x1="13" y1="-6" x2="13" y2="0"/><line x1="18" y1="-6" x2="18" y2="0"/>
+      <line x1="8" y1="26" x2="8" y2="32"/><line x1="13" y1="26" x2="13" y2="32"/><line x1="18" y1="26" x2="18" y2="32"/>
+      <line x1="-6" y1="8" x2="0" y2="8"/><line x1="-6" y1="13" x2="0" y2="13"/><line x1="-6" y1="18" x2="0" y2="18"/>
+      <line x1="26" y1="8" x2="32" y2="8"/><line x1="26" y1="13" x2="32" y2="13"/><line x1="26" y1="18" x2="32" y2="18"/>
+    </g>
+  </g>
+  <text x="225" y="640" font-size="30" font-weight="800"
+        letter-spacing="1" fill="#5c6b75">LLM-POWERED</text>
+</svg>

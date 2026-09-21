@@ -1,0 +1,8 @@
+sources:
+- repo: JoasASantos/NeuroSploit
+  branch: main
+  last_synced_commit: 4b71ac63a068a7d279cead8ee78f9c97fc5e1586
+  extracted:
+  - path: README.md
+    maps_to: references/upstream-readme.md
+  notes: NeuroSploit — autonomous multi-model penetration testing harness (348 agents)
