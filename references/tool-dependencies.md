@@ -47,7 +47,7 @@ Installed by `deploy.py`, but no code path invokes it and no pipeline output dep
 
 | Tool | What it is | Used by | Why | If missing |
 |---|---|---|---|---|
-| `graphviz` (`dot`) | DOT renderer | Not invoked — `skills/site-assessment-pipeline/scripts/topology.py --dot` *emits* DOT text | Rendering the topology diagram to an image, by hand | **No effect** — no diagram image; the DOT text output is unchanged |
+| `graphviz` (`dot`) | DOT renderer | Not invoked — `scripts/topology.py --dot` *emits* DOT text | Rendering the topology diagram to an image, by hand | **No effect** — no diagram image; the DOT text output is unchanged |
 
 ## Local LLM
 
@@ -92,7 +92,7 @@ Requires an **external USB adapter**. The internal interface is never used.
 
 These are installed by `deploy.py` and configured for the pipeline, but no script invokes
 them. The Hermes agent runs them per the `site-assessment-pipeline` skill, and
-`skills/site-assessment-pipeline/scripts/engagement-profiles.py` supplies the per-profile flags.
+`scripts/engagement-profiles.py` supplies the per-profile flags.
 
 | Tool | What it is | Configuration | If missing |
 |---|---|---|---|
@@ -115,9 +115,9 @@ result of scanning every `import` in the tree.
 
 | Package | Import name | Imported by | Notes |
 |---|---|---|---|
-| `python-docx` | `docx` | `scripts/_build_docx.py`, `scripts/render-docs.py`, `skills/site-assessment-pipeline/scripts/report-gen.py` | Technical report |
-| `python-pptx` | `pptx` | `skills/site-assessment-pipeline/scripts/report-gen.py` | Executive deck |
-| `openpyxl` | `openpyxl` | `skills/site-assessment-pipeline/scripts/excel-checklist.py`, `scripts/retest-diff.py` | Remediation checklist |
+| `python-docx` | `docx` | `scripts/_build_docx.py`, `scripts/render-docs.py`, `scripts/report-gen.py` | Technical report |
+| `python-pptx` | `pptx` | `scripts/report-gen.py` | Executive deck |
+| `openpyxl` | `openpyxl` | `scripts/excel-checklist.py`, `scripts/retest-diff.py` | Remediation checklist |
 | `pyyaml` | `yaml` | `scripts/sync_knowledge.py`, `scripts/check-skill-freshness.py` | Knowledge-source manifests |
 | `hashid` | — | Not imported — provides the `hashid` **binary** used by `wireless_crack.py` | Installed as a pip package, consumed as a subprocess |
 | `Pillow` | `PIL` | `scripts/build-shorts.py`, `scripts/build-video.py`, `scripts/build_slides.py` | **Not installed by `deploy.py`** — see gap 1 |
@@ -180,7 +180,6 @@ which llama-server iw nmcli airmon-ng airodump-ng aireplay-ng aircrack-ng \
 
 - `references/deployment-manifest.md` — per-distro install commands
 - `references/llm-architecture.md` — model and server architecture
-- `references/anthropic-skills-manifest.md` — the Agent Skill layer
-- `references/red-team-toolkit.md` — external tool reference by kill-chain phase
-- Website: `portshim-landing/pages/dependencies.html` mirrors this document for the public
+- `references/agent-integration.md` — driving the harness from an agent, end to end
+- Website: `pages/dependencies.html` mirrors this document for the public
   site. **The two must change together** — the page is hand-maintained, not generated.

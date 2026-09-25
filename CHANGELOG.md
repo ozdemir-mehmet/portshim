@@ -2,6 +2,25 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.14] — 2026-09-25
+
+### Added
+- Synthetic sample reports on the website. The sample gallery's six images are generated from an invented assessment rather than captured from a real one: `tools/sample-findings.json` holds the fixture (six example findings on the documentation range `192.0.2.0/24`, reserved example hostnames, real public CVE identifiers), `tools/make-sample-report-images.py` renders it through `report-gen.py` and draws a label under every image, and `approved-assets.json` pins the six hashes.
+- A release boundary check: `scripts/boundary-check.py`, run against the exported tree before anything is published, failing closed on six conditions — a stripped path referenced by a shipped file, a stripped path present in the tree, a private path written into the copy, a shipped instruction naming something that is not there, a learnings marker, and an asset manifest that does not account for every file in the assets directory. It reads archives and the members inside them, PDF content streams, PNG text chunks and the UTF-16 encodings of all of it; a file it cannot read in full fails the run rather than passing unexamined.
+- Agent integration documentation in `references/agent-integration.md`: how to wire PortShim into an agent's own skills and instruction files, with the commands, replacing the installer that used to do it.
+
+### Changed
+- The seven pipeline scripts moved to `scripts/` at the repository root, so the tree that holds them is no longer a mix of published code and internal notes.
+- `scripts/report-gen.py` takes the assessment date as an input — `--assessment-date`, or `PORTSHIM_REPORT_DATE` — with the month spelled from a fixed table so the output does not depend on the host locale, and a malformed date is an error rather than a silent fallback to today. The target network is read from the findings.
+- The `report` extra requires WeasyPrint and `pillow>=10`.
+- Shipped documentation re-pointed at paths that exist in the published tree; a page describing a directory as it sits in the development repository now describes the published layout.
+- Site copy: a footer credit pointing at an unrelated third party replaced with the product name, and a retired internal placeholder name removed from the pages and the README.
+- The landing README's learnings section removed; the guidance it summarised is on the site's own pages and in each tool's `--help`, which is where a reader of the published tree finds it.
+
+### Fixed
+- `scripts/render-docs.py` derived its operator-guide directory from a path that does not exist in a published tree and could not be pointed anywhere else. It now takes `--all-guides DIR` and exits with a message when it cannot resolve one.
+- The publishing pipeline no longer exports a tree it has not checked. The landing page is read from the committed revision rather than the working copy, so a file no commit has seen cannot ride into a release, and the run refuses to start while any of its own inputs is uncommitted.
+
 ## [v0.5.13] — 2026-09-21
 
 ### Added
@@ -107,7 +126,7 @@ All notable changes to PortShim are documented here.
 ## [v0.5.5] — 2026-07-13
 
 ### Fixed
-- Release script now bumps source portshim-landing/ versions too,
+- Release script now bumps the site source versions too,
   preventing stale version strings between releases
 
 ## [v0.5.4] — 2026-07-13
@@ -123,7 +142,7 @@ All notable changes to PortShim are documented here.
 - Release guard: rejects release if CHANGELOG.md missing version entry
 
 ### Fixed
-- Footer Cal-Met link opens in new tab (target="_blank")
+- Footer link opens in new tab (target="_blank")
 
 ## [v0.5.2] — 2026-07-13
 

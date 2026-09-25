@@ -1,4 +1,4 @@
-"""Unit tests for skills/site-assessment-pipeline/scripts/engagement-profiles.py."""
+"""Unit tests for scripts/engagement-profiles.py."""
 import json
 import os
 import sys
@@ -6,13 +6,8 @@ from pathlib import Path
 
 import pytest
 
-# Add the stealth-profiles script directory to sys.path
-SCRIPTS_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "skills"
-    / "site-assessment-pipeline"
-    / "scripts"
-)
+# Add the pipeline scripts directory to sys.path
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 # Remove .py extension handling — the module is engagement-profiles.py

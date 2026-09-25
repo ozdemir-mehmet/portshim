@@ -109,7 +109,7 @@ CLASSIFICATION_RULES = OrderedDict([
     }),
     ("Corporate LAN", {
         "ports": {135, 445, 3389},
-        "hostnames": ["corp", "ssw", "local"],
+        "hostnames": ["corp", "lan", "internal", "local"],
         "weight": 6,
     }),
     ("UniFi Appliance", {

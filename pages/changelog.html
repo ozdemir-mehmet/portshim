@@ -123,7 +123,28 @@
 
 <section class="page-content">
   <div class="container">
-    <h3>v0.5.13 <small>2026-09-21</small></h3>
+    <h3>v0.5.14 <small>2026-09-25</small></h3>
+<h4>Added</h4>
+<ul>
+<li>Synthetic sample reports on the website. The sample gallery's six images are generated from an invented assessment rather than captured from a real one: <code>tools/sample-findings.json</code> holds the fixture (six example findings on the documentation range <code>192.0.2.0/24</code>, reserved example hostnames, real public CVE identifiers), <code>tools/make-sample-report-images.py</code> renders it through <code>report-gen.py</code> and draws a label under every image, and <code>approved-assets.json</code> pins the six hashes.</li>
+<li>A release boundary check: <code>scripts/boundary-check.py</code>, run against the exported tree before anything is published, failing closed on six conditions — a stripped path referenced by a shipped file, a stripped path present in the tree, a private path written into the copy, a shipped instruction naming something that is not there, a learnings marker, and an asset manifest that does not account for every file in the assets directory. It reads archives and the members inside them, PDF content streams, PNG text chunks and the UTF-16 encodings of all of it; a file it cannot read in full fails the run rather than passing unexamined.</li>
+<li>Agent integration documentation in <code>references/agent-integration.md</code>: how to wire PortShim into an agent's own skills and instruction files, with the commands, replacing the installer that used to do it.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li>The seven pipeline scripts moved to <code>scripts/</code> at the repository root, so the tree that holds them is no longer a mix of published code and internal notes.</li>
+<li><code>scripts/report-gen.py</code> takes the assessment date as an input — <code>--assessment-date</code>, or <code>PORTSHIM_REPORT_DATE</code> — with the month spelled from a fixed table so the output does not depend on the host locale, and a malformed date is an error rather than a silent fallback to today. The target network is read from the findings.</li>
+<li>The <code>report</code> extra requires WeasyPrint and <code>pillow>=10</code>.</li>
+<li>Shipped documentation re-pointed at paths that exist in the published tree; a page describing a directory as it sits in the development repository now describes the published layout.</li>
+<li>Site copy: a footer credit pointing at an unrelated third party replaced with the product name, and a retired internal placeholder name removed from the pages and the README.</li>
+<li>The landing README's learnings section removed; the guidance it summarised is on the site's own pages and in each tool's <code>--help</code>, which is where a reader of the published tree finds it.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><code>scripts/render-docs.py</code> derived its operator-guide directory from a path that does not exist in a published tree and could not be pointed anywhere else. It now takes <code>--all-guides DIR</code> and exits with a message when it cannot resolve one.</li>
+<li>The publishing pipeline no longer exports a tree it has not checked. The landing page is read from the committed revision rather than the working copy, so a file no commit has seen cannot ride into a release, and the run refuses to start while any of its own inputs is uncommitted.</li>
+</ul>
+<h3>v0.5.13 <small>2026-09-21</small></h3>
 <h4>Added</h4>
 <ul>
 <li>External tool dependency reference (<code>references/tool-dependencies.md</code>) — every tool PortShim shells out to, which pipeline phase uses it, whether it is required or optional, and what stops working when it is absent. The inventory is derived from <code>deploy.py</code> so it cannot drift from the installer.</li>
@@ -229,7 +250,7 @@
 <h3>v0.5.5 <small>2026-07-13</small></h3>
 <h4>Fixed</h4>
 <ul>
-<li>Release script now bumps source portshim-landing/ versions too,</li>
+<li>Release script now bumps the site source versions too,</li>
 </ul>
 <h3>v0.5.4 <small>2026-07-13</small></h3>
 <h4>Fixed</h4>
@@ -244,7 +265,7 @@
 </ul>
 <h4>Fixed</h4>
 <ul>
-<li>Footer Cal-Met link opens in new tab (target="_blank")</li>
+<li>Footer link opens in new tab (target="_blank")</li>
 </ul>
 <h3>v0.5.2 <small>2026-07-13</small></h3>
 <h4>Added</h4>
@@ -335,7 +356,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.13 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.14 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>

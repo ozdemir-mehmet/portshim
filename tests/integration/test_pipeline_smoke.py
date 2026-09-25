@@ -17,7 +17,7 @@ import pytest
 
 pytestmark = pytest.mark.smoke
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "skills" / "site-assessment-pipeline" / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
 VENV_PYTHON = Path(__file__).resolve().parent.parent.parent / ".venv" / "bin" / "python"
 PYTHON = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
 TARGET = "scanme.nmap.org"

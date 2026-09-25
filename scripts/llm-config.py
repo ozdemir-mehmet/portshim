@@ -2,7 +2,7 @@
 """
 llm-config.py — Generate per-tool AND per-phase LLM configuration.
 
-Based on benchmark results (references/benchmarks/llm-model-matrix.md).
+Model recommendations come from benchmarks run against local and cloud models.
 Supports three deployment modes with automatic per-phase model selection.
 
 Usage:
@@ -113,7 +113,6 @@ def generate_env(mode: str, config: dict) -> str:
         f"# {config['description']}",
         f"#",
         f"# Per-phase model selection based on benchmarks:",
-        f"#   references/benchmarks/llm-model-matrix.md",
         "",
     ]
     for phase, pc in phases.items():

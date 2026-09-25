@@ -35,7 +35,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SCRIPTS = PROJECT_ROOT / "scripts"
-SKILL_SCRIPTS = PROJECT_ROOT / "skills" / "site-assessment-pipeline" / "scripts"
 PID_FILE = Path(os.path.expanduser("~/.hermes")) / "llama-server.pid"
 
 # ── Model registry (mirrors llm-config.py) ──
@@ -370,8 +369,8 @@ def check_prerequisites():
     for script, path in [
         ("sync_knowledge.py", SCRIPTS / "sync_knowledge.py"),
         ("check-skill-freshness.py", SCRIPTS / "check-skill-freshness.py"),
-        ("engagement-profiles.py", SKILL_SCRIPTS / "engagement-profiles.py"),
-        ("llm-config.py", SKILL_SCRIPTS / "llm-config.py"),
+        ("engagement-profiles.py", SCRIPTS / "engagement-profiles.py"),
+        ("llm-config.py", SCRIPTS / "llm-config.py"),
     ]:
         ok = path.exists()
         status(f"Script: {script}", ok)
@@ -422,7 +421,7 @@ def configure_engagement(profile="surgical"):
     if profile not in valid:
         print(f"  {RED}Invalid profile: {profile}. Must be one of: {', '.join(valid)}{RESET}")
         return False
-    ok = run([sys.executable, str(SKILL_SCRIPTS / "engagement-profiles.py"), profile])
+    ok = run([sys.executable, str(SCRIPTS / "engagement-profiles.py"), profile])
     if ok:
         label = {
             "silent-entry": "Silent Entry (IDS-aware)",
@@ -461,7 +460,7 @@ def configure_llm(mode="hybrid", models_dir=None):
         status(f"Models directory: {default_models} (default)", True)
 
     ok = run(
-        [sys.executable, str(SKILL_SCRIPTS / "llm-config.py"), mode, "--output-dir", str(PROJECT_ROOT / "configs")]
+        [sys.executable, str(SCRIPTS / "llm-config.py"), mode, "--output-dir", str(PROJECT_ROOT / "configs")]
     )
     if ok:
         status(label.get(mode, mode), True)
@@ -478,7 +477,7 @@ def show_hermes_instructions(target, engagement, mode, wireless):
     print(f"  {BOLD}LLM Mode:{RESET}   {mode}")
     print(f"  {BOLD}Wireless:{RESET}   {'In scope' if wireless else 'Not in scope'}")
     print(f"\n  {BOLD}Next step — in Hermes:{RESET}")
-    print(f"  {CYAN}/skill site-assessment-pipeline{RESET}")
+    print(f"  {CYAN}See references/agent-integration.md — driving the harness from an agent{RESET}")
     print(f"\n  Then tell Hermes your target:")
     print(
         f"  {YELLOW}Start Phase 0. Target is {target}. "

@@ -35,7 +35,9 @@ Input format (findings.json):
 """
 
 import argparse
+import ipaddress
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +46,56 @@ from pathlib import Path
 BRAND_RED = "CC4141"
 DARK_GRAY = "333333"
 MED_GRAY = "797979"
+
+_MONTHS = ("January", "February", "March", "April", "May", "June",
+           "July", "August", "September", "October", "November", "December")
+
+
+def _assessment_date() -> str:
+    """The date printed on a report.
+
+    A caller may pin it — `--assessment-date YYYY-MM-DD`, or `PORTSHIM_REPORT_DATE` — so that a
+    report is reproducible. The sample deliverables the landing site publishes are pinned by
+    hash, and a render that stamps today's date cannot be regenerated tomorrow.
+    """
+    pin = os.environ.get("PORTSHIM_REPORT_DATE")
+    if pin is not None:
+        try:
+            day = datetime.strptime(pin, "%Y-%m-%d")
+        except ValueError:
+            # Loud, because this is the one place the reproducibility mechanism can be switched
+            # off: a malformed pin that fell back to today would render fine and differ silently.
+            raise ValueError(
+                f"PORTSHIM_REPORT_DATE/--assessment-date must be YYYY-MM-DD, got {pin!r}"
+            ) from None
+    else:
+        day = datetime.now()
+    # Spelled here rather than through strftime: %B and %d are rendered by the C library's
+    # locale, so the same report would carry a different month under a non-English LC_TIME and
+    # a byte-pinned sample could not be regenerated on that machine.
+    return f"{_MONTHS[day.month - 1]} {day.day:02d}, {day.year}"
+
+
+def _target_network(findings: list[dict]) -> str:
+    """The network a report is about: as the findings declare it, else derived from an address.
+
+    Never derived from a hostname: taking a name's first labels and appending `.0/24` invents a
+    range that is neither a network nor the name it came from, and it prints as a real one.
+
+    Declaration order decides which finding supplies the value, so a report rendered from the same
+    findings can print a different network than one rendered before this function existed: the code
+    it replaced took the alphabetically first host. Findings files, not this function, are what to
+    compare when two renders disagree.
+    """
+    declared = next((f.get("network") for f in findings if isinstance(f, dict) and f.get("network")), None)
+    if declared:
+        return str(declared)
+    host = next((f.get("host") for f in findings if isinstance(f, dict) and f.get("host")), "")
+    try:
+        return str(ipaddress.ip_network(f"{host}/24", strict=False))
+    except ValueError:
+        return host or "N/A"
+
 
 SEVERITY_COLORS = {
     "critical": "CC4141",
@@ -183,7 +235,7 @@ def generate_docx(findings: list[dict], output_path: str) -> str:
     title = doc.add_heading("Security Assessment Report", level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    doc.add_paragraph(f"PortShim — {datetime.now().strftime('%B %d, %Y')}")
+    doc.add_paragraph(f"PortShim — {_assessment_date()}")
     doc.add_paragraph("")
 
     # Executive Summary
@@ -194,14 +246,12 @@ def generate_docx(findings: list[dict], output_path: str) -> str:
     has_critical = summary['critical'] > 0
     has_high = summary['high'] > 0
     
-    # Derive target network from findings hosts
-    hosts_in_findings = sorted(set(f.get("host", "") for f in findings if f.get("host")))
-    target_net = hosts_in_findings[0].rsplit(".", 1)[0] + ".0/24" if hosts_in_findings else "N/A"
+    target_net = _target_network(findings)
 
     doc.add_heading("Assessment Overview", level=2)
     doc.add_paragraph(
         f"PortShim conducted an internal network security assessment of {target_net} "
-        f"on {datetime.now().strftime('%B %d, %Y')}. The assessment identified "
+        f"on {_assessment_date()}. The assessment identified "
         f"{len(findings)} findings across {host_count_uniq} live hosts using a combination "
         f"of service enumeration and vulnerability scanning."
     )
@@ -373,9 +423,7 @@ def generate_pptx(findings: list[dict], output_path: str, engagement_profile: st
     total = len(findings)
     has_critical = summary['critical'] > 0
     has_high = summary['high'] > 0
-    # Derive target network from findings hosts
-    hosts_in_findings = sorted(set(f.get("host", "") for f in findings if f.get("host")))
-    target_net = hosts_in_findings[0].rsplit(".", 1)[0] + ".0/24" if hosts_in_findings else "N/A"
+    target_net = _target_network(findings)
     risk_label = "CRITICAL" if has_critical else "HIGH" if has_high else "MODERATE"
 
     def _add_slide_title(prs, title_text):
@@ -437,7 +485,7 @@ def generate_pptx(findings: list[dict], output_path: str, engagement_profile: st
     subtitle.font.name = "Calibri"
 
     date_para = tf.add_paragraph()
-    date_para.text = datetime.now().strftime("%B %d, %Y")
+    date_para.text = _assessment_date()
     date_para.font.size = Pt(14)
     date_para.font.color.rgb = RGBColor(*hex_to_rgb(MED_GRAY))
     date_para.font.name = "Calibri"
@@ -447,7 +495,7 @@ def generate_pptx(findings: list[dict], output_path: str, engagement_profile: st
     host_count = len(set(f.get("host", "") for f in findings if f.get("host")))
 
     _add_bullet(slide, f"Target Network:  {target_net}", 0.8, 1.5, 11, 0.5, 18, DARK_GRAY, True)
-    _add_bullet(slide, f"Assessment Date:  {datetime.now().strftime('%B %d, %Y')}", 0.8, 2.1, 11, 0.5, 18, DARK_GRAY, True)
+    _add_bullet(slide, f"Assessment Date:  {_assessment_date()}", 0.8, 2.1, 11, 0.5, 18, DARK_GRAY, True)
     _add_bullet(slide, f"Profile:         {engagement_profile}", 0.8, 2.7, 11, 0.5, 18, DARK_GRAY, True)
     _add_bullet(slide, f"LLM Mode:        Hybrid (local models for exploitation, cloud for reporting)", 0.8, 3.3, 11, 0.5, 18, DARK_GRAY, True)
     _add_bullet(slide, f"Live Hosts Found:  {host_count}", 0.8, 3.9, 11, 0.5, 18, DARK_GRAY, True)
@@ -675,9 +723,7 @@ def generate_pdf(findings: list[dict], output_path: str, engagement_profile: str
         risk_label = "MODERATE"
         risk_detail = "No critical-severity vulnerabilities were identified, though several medium-severity issues should be addressed to maintain a strong security posture."
 
-    # Derive target network from findings hosts
-    hosts_in_findings = sorted(set(f.get("host", "") for f in findings if f.get("host")))
-    target_net = hosts_in_findings[0].rsplit(".", 1)[0] + ".0/24" if hosts_in_findings else "N/A"
+    target_net = _target_network(findings)
 
     # Top critical/high findings (up to 5)
     top_findings = [f for f in findings if f.get("severity") in ("critical", "high")][:5]
@@ -791,12 +837,12 @@ def generate_pdf(findings: list[dict], output_path: str, engagement_profile: str
 <body>
 
 <h1>Security Assessment Report</h1>
-<p class="subtitle">PortShim — {datetime.now().strftime('%B %d, %Y')} | {total} findings</p>
+<p class="subtitle">PortShim — {_assessment_date()} | {total} findings</p>
 
 <h2>Executive Summary</h2>
 
 <h3>Assessment Overview</h3>
-<p>PortShim conducted an internal network security assessment of <strong>{target_net}</strong> on {datetime.now().strftime('%B %d, %Y')}. The assessment identified <strong>{total} findings</strong> across <strong>{host_count} live hosts</strong> using a combination of service enumeration and vulnerability scanning. The engagement used a <strong>{engagement_profile}</strong> profile with <strong>Hybrid</strong> LLM mode (local models for exploitation, cloud for reporting).</p>
+<p>PortShim conducted an internal network security assessment of <strong>{target_net}</strong> on {_assessment_date()}. The assessment identified <strong>{total} findings</strong> across <strong>{host_count} live hosts</strong> using a combination of service enumeration and vulnerability scanning. The engagement used a <strong>{engagement_profile}</strong> profile with <strong>Hybrid</strong> LLM mode (local models for exploitation, cloud for reporting).</p>
 
 <h3>Overall Risk Posture: {risk_label}</h3>
 <div class="summary-box">
@@ -888,7 +934,16 @@ def main():
     parser.add_argument("--format", choices=["docx", "pptx", "pdf", "all"], default="all")
     parser.add_argument("--prefix", default="portshim", help="Filename prefix")
     parser.add_argument("--engagement", default="Surgical", help="Engagement profile name")
+    parser.add_argument("--assessment-date", metavar="YYYY-MM-DD",
+                        help="Pin the date printed on the report (default: today; also honours "
+                             "PORTSHIM_REPORT_DATE), so a rebuild reproduces the published bytes")
     args = parser.parse_args()
+    if args.assessment_date is not None:
+        os.environ["PORTSHIM_REPORT_DATE"] = args.assessment_date
+        try:
+            _assessment_date()
+        except ValueError as exc:
+            parser.error(str(exc))
 
     findings = load_findings(args.findings)
     if not findings:
@@ -927,7 +982,7 @@ def main():
     # Auto-save to scan history DB (if available)
     try:
         from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "scripts"))
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
         from save_to_db import main as save_main
         import argparse as _argparse
         # Derive engagement ID from output dir or date

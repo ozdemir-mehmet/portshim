@@ -222,7 +222,7 @@ def main():
     # Auto-save retest results to scan history DB
     try:
         from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "scripts"))
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
         from scan_db import ScanDB
         db = ScanDB()
         # Derive engagement ID from filename

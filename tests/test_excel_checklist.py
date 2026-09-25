@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 # Load excel_checklist module directly by file path (avoid sys.path issues during pytest collection)
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "skills" / "site-assessment-pipeline" / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 _excel_path = SCRIPTS_DIR / "excel-checklist.py"
 _spec = importlib.util.spec_from_file_location("excel_checklist", str(_excel_path))
 _excel_checklist = importlib.util.module_from_spec(_spec)

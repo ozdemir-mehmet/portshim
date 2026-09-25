@@ -148,7 +148,7 @@ _t(doc, ['Project','Stars','Role in PortShim'], [
     ['VECTR','1.6k','Red/blue team test tracking (reference)'],
     ['Vulnreport','600','Pentest management and automation (reference)'],
 ])
-_b(doc, 'PortShim itself - the orchestrator, device classifier, stealth profiles, topology mapper, deployment bootstrap, and knowledge-source tracking - is original work. See skills/site-assessment-pipeline/sources.yaml for the complete dependency manifest with commit-pinned tracking.')
+_b(doc, 'PortShim itself - the orchestrator, device classifier, stealth profiles, topology mapper, deployment bootstrap, and knowledge-source tracking - is original work. Its knowledge-source tracking pins every external source to a commit, so the provenance of anything reused here is auditable.')
 
 _h(doc, 'End-to-End Example: The Flat Network')
 _b(doc, 'A representative scenario demonstrating what PortShim discovers during a typical on-site assessment of a medium-sized enterprise with a flat network architecture - no VLAN segmentation, no NAC, everything on one subnet.')
@@ -181,6 +181,8 @@ _t(doc, ['Metric','Value'], [['Total Components','40 files (skills, scripts, tes
 
 _cta(doc, 'PortShim is ready for authorised deployment.', 'Run deploy.py on the target Linux machine to bootstrap the full capability.')
 
-out = _os.path.expanduser('~/projects/portshim/output/exec-summary/exec-summary.docx')
+out_dir = _os.path.join('output', 'exec-summary')
+_os.makedirs(out_dir, exist_ok=True)
+out = _os.path.join(out_dir, 'exec-summary.docx')
 doc.save(out)
 print(f'OK: {out} ({_os.path.getsize(out)} bytes)')
