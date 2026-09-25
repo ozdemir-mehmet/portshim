@@ -83,11 +83,12 @@ MARKERS = [
 # private-path reference added to that file later, which is the hole a reviewer
 # would have to be told about; a term-scoped one only pardons the known lines.
 # Each is owned by an open issue and printed on every run.
-#   AC7 — these two tests leave with the curated public subset; until that lands
-#   they are the three lines step 4a reports.
+#   AC7 — this test leaves with the curated public subset; until that lands it is
+#   the one line step 4a reports. The pair for tests/test_skill_consistency.py
+#   went with that module on 2026-09-25, when its checks moved into
+#   tests/test_skill_trees.py and it left the tree.
 COND3_EXEMPT = {
     ("tests/test_uat_wired.py", "tests/fixtures/"): "AC7 — leaves with the curated public subset",  # boundary:allow — the exemption's own key
-    ("tests/test_skill_consistency.py", "skills/"): "AC7 — leaves with the curated public subset",  # boundary:allow — the exemption's own key
 }
 
 # The inline escape hatch, so an unavoidable mention does not force a code change.

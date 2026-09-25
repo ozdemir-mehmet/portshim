@@ -1,0 +1,17 @@
+{
+  "collected": 557,
+  "measured": "2026-09-25",
+  "tree": "a freshly built release tree (99 files), not the private working tree",
+  "command": "python -m pytest -q -p no:cacheprovider, run from the built tree",
+  "observed": "38 failed, 515 passed, 4 errors",
+  "expected_failures_by_file": {
+    "tests/integration/test_pipeline_smoke.py": 1,
+    "tests/test_excel_checklist.py": 8,
+    "tests/test_report_gen.py": 4,
+    "tests/test_retest_diff.py": 9,
+    "tests/test_topology.py": 4,
+    "tests/test_uat_wired.py": 13,
+    "tests/test_wireless_pmkid.py": 3
+  },
+  "why": "42 of the 557 collected tests fail or error on a clean machine, and 515 pass: the private fixtures, engagement material and outputs do not ship. CI asserts the collected count, because that is the number a lost module changes."
+}

@@ -2,6 +2,17 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.15] — 2026-09-26
+
+### Added
+- A CI check on the size of the published test suite: `tests/public-suite.json` publishes the figure this tree is expected to collect — **557 tests**, measured on a release tree built the way this repository's pipeline builds one — together with what that run reported (38 failed, 515 passed, 4 errors, broken down by file) and why the subset behaves that way. `.github/workflows/public-suite.yml` runs on pull requests, installs `.[dev,report]`, and fails when the collected count differs from the published figure. It deliberately does not run on pushes to `main`, which `pr-gate.yml` guards.
+
+### Changed
+- `tests/integration/test_pipeline_smoke.py` and the `git fetch` test in `tests/test_uat_wired.py` now declare the `network` marker they always depended on. The smoke module's own docstring said it required network and nmap while declaring only `smoke`; a run with `-m "not network"` is clean now, and no test lost coverage.
+
+### Removed
+- The skill directories that used to ship alongside the tools: two `SKILL.md` files and the test that validated their shape. This tree carries the tools and their documentation; how to wire them into an agent is `references/agent-integration.md`, which is where a reader of this tree finds it.
+
 ## [v0.5.14] — 2026-09-25
 
 ### Added
