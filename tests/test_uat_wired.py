@@ -33,6 +33,7 @@ pytestmark = pytest.mark.uat
 class TestRepoInSync:
     """Pre-flight: verify local repo matches origin before pipeline tests."""
 
+    @pytest.mark.network
     def test_not_behind_origin(self):
         """Pipeline must not run with outdated scripts."""
         subprocess.run(

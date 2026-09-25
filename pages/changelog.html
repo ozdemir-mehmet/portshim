@@ -123,7 +123,20 @@
 
 <section class="page-content">
   <div class="container">
-    <h3>v0.5.14 <small>2026-09-25</small></h3>
+    <h3>v0.5.15 <small>2026-09-26</small></h3>
+<h4>Added</h4>
+<ul>
+<li>A CI check on the size of the published test suite: <code>tests/public-suite.json</code> publishes the figure this tree is expected to collect — **557 tests**, measured on a release tree built the way this repository's pipeline builds one — together with what that run reported (38 failed, 515 passed, 4 errors, broken down by file) and why the subset behaves that way. <code>.github/workflows/public-suite.yml</code> runs on pull requests, installs <code>.[dev,report]</code>, and fails when the collected count differs from the published figure. It deliberately does not run on pushes to <code>main</code>, which <code>pr-gate.yml</code> guards.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li><code>tests/integration/test_pipeline_smoke.py</code> and the <code>git fetch</code> test in <code>tests/test_uat_wired.py</code> now declare the <code>network</code> marker they always depended on. The smoke module's own docstring said it required network and nmap while declaring only <code>smoke</code>; a run with <code>-m "not network"</code> is clean now, and no test lost coverage.</li>
+</ul>
+<h4>Removed</h4>
+<ul>
+<li>The skill directories that used to ship alongside the tools: two <code>SKILL.md</code> files and the test that validated their shape. This tree carries the tools and their documentation; how to wire them into an agent is <code>references/agent-integration.md</code>, which is where a reader of this tree finds it.</li>
+</ul>
+<h3>v0.5.14 <small>2026-09-25</small></h3>
 <h4>Added</h4>
 <ul>
 <li>Synthetic sample reports on the website. The sample gallery's six images are generated from an invented assessment rather than captured from a real one: <code>tools/sample-findings.json</code> holds the fixture (six example findings on the documentation range <code>192.0.2.0/24</code>, reserved example hostnames, real public CVE identifiers), <code>tools/make-sample-report-images.py</code> renders it through <code>report-gen.py</code> and draws a label under every image, and <code>approved-assets.json</code> pins the six hashes.</li>
@@ -356,7 +369,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.14 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.15 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>

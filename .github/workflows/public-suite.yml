@@ -1,0 +1,46 @@
+name: Public suite count
+
+# The public repository ships a curated subset of the private suite — the fixtures and engagement material do
+# not come with it — and the number of tests that subset collects is a published figure. A release that
+# quietly loses a test module is a release whose coverage claim is false, and nothing else in this repository
+# would notice, so this job asserts the number itself rather than a pass/fail line: several of the shipped
+# tests are network- and fixture-dependent and are documented as expected failures beside the count.
+#
+# Pull requests only. A push to main is pr-gate.yml's business — that guard reverts a direct push, and it runs
+# on main pushes, so this job does not.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the package with its test and report extras
+        run: python -m pip install -e '.[dev,report]'
+
+      - name: Assert the collected test count
+        run: |
+          set -euo pipefail
+          expected=$(python - <<'PY'
+          import json, pathlib
+          print(json.loads(pathlib.Path("tests/public-suite.json").read_text())["collected"])
+          PY
+          )
+          collected=$(python -m pytest --collect-only -q -p no:cacheprovider | tail -1 | awk '{print $1}')
+          echo "published count: $expected"
+          echo "collected:       $collected"
+          if [ "$expected" != "$collected" ]; then
+            echo "::error::the public suite collects $collected tests, and tests/public-suite.json publishes $expected. If the change is intended, re-measure the number on a freshly built release tree and update the file in the same commit."
+            exit 1
+          fi

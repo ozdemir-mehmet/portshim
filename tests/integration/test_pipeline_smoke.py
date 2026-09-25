@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.network]
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
 VENV_PYTHON = Path(__file__).resolve().parent.parent.parent / ".venv" / "bin" / "python"
