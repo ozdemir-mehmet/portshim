@@ -451,7 +451,7 @@ def main():
             print("  Metasploit Framework: installed")
         else:
             print("  Metasploit: skipped (use --with-msf to include)")
-        print("Run 'hermes' and load: /skill site-assessment-pipeline")
+        print("Load the harness in your agent: see references/agent-integration.md")
     print("=" * 50)
 
 

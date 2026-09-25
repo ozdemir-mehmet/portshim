@@ -3,9 +3,9 @@
 Generic markdown → DOCX + PDF renderer with brand styling (no logo).
 
 Usage:
-    python scripts/render-docs.py references/operator-guide/01-quick-start.md
-    python scripts/render-docs.py --all-operator-guides
-    python scripts/render-docs.py --pdf-only references/operator-guide/01-quick-start.md
+    python scripts/render-docs.py path/to/document.md
+    python scripts/render-docs.py --all-guides path/to/guide-dir/
+    python scripts/render-docs.py --pdf-only path/to/document.md
 """
 
 import os
@@ -518,8 +518,14 @@ if __name__ == '__main__':
 
     arg = sys.argv[1]
 
-    if arg == '--all-operator-guides':
-        guide_dir = Path(__file__).resolve().parent.parent / 'references' / 'operator-guide'
+    if arg in ('--all-operator-guides', '--all-guides'):
+        # The directory is required, not defaulted to this checkout's private
+        # guide tree: naming it here put a private path into shipped code, and
+        # the default could never resolve in a release tree anyway.
+        if len(sys.argv) < 3:
+            print(f'Usage: render-docs.py {arg} <guide-dir>')
+            sys.exit(1)
+        guide_dir = Path(sys.argv[2])
         md_files = sorted(guide_dir.glob('*.md'))
         if not md_files:
             print(f'No .md files found in {guide_dir}')

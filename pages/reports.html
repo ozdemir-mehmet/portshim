@@ -212,13 +212,13 @@
   <li><strong style="color:#64748b;">Info</strong> — #64748b (slate)</li>
 </ul>
 
-<h2>Sample Reports</h2>
-<p>Preview of each report format generated from a de-identified assessment of a 10.0.0.0/24 network with 14 findings. Full samples are available in the <code>outputs/reports/</code> directory after running any engagement.</p>
+<h2 id="sample-reports">Sample Reports</h2>
+<p>Preview of each report format, rendered from a synthetic sample assessment: six example findings for reserved hostnames (RFC 2606), with a TEST-NET-1 documentation range (RFC 5737) printed as the scan's network — the hosts are names, and no host address falls in that range. Run the pipeline on your own findings to produce the same formats: they are written under <code>outputs/reports/</code>.</p>
 
 <div class="report-gallery">
   <div class="report-card">
     <div class="report-card-image">
-      <img src="../images/reports/sample-docx-cover.png" alt="DOCX report cover page" loading="lazy">
+      <img src="../images/reports/sample-docx-cover.png" alt="DOCX report cover page, synthetic sample data" loading="lazy">
     </div>
     <div class="report-card-body">
       <span class="report-card-badge badge-docx">DOCX</span>
@@ -229,23 +229,23 @@
 
   <div class="report-card">
     <div class="report-card-image">
-      <img src="../images/reports/sample-pdf-content.png" alt="PDF report findings table" loading="lazy">
+      <img src="../images/reports/sample-pdf-content.png" alt="PDF report findings table, synthetic sample data" loading="lazy">
     </div>
     <div class="report-card-body">
       <span class="report-card-badge badge-pdf">PDF</span>
       <h4>Print-Ready Report</h4>
-      <p>WeasyPrint-rendered A4 PDF with cover, table of contents, severity-coloured findings, CVSS vectors, CVE links, and hyperlinked cross-references.</p>
+      <p>WeasyPrint-rendered A4 PDF with cover, executive summary, severity-coloured findings, CVSS vectors, CVE links, and hyperlinked cross-references.</p>
     </div>
   </div>
 
   <div class="report-card">
     <div class="report-card-image">
-      <img src="../images/reports/sample-pptx-slide2.png" alt="PPTX executive brief slide" loading="lazy">
+      <img src="../images/reports/sample-pptx-slide2.png" alt="PPTX executive brief slide, synthetic sample data" loading="lazy">
     </div>
     <div class="report-card-body">
       <span class="report-card-badge badge-pptx">PPTX</span>
       <h4>Executive Brief</h4>
-      <p>Six-slide widescreen deck with title, assessment overview, risk posture bars, key risks with severity tags, remediation roadmap, and next steps.</p>
+      <p>Six-slide widescreen deck: title, assessment overview, overall risk posture, key risks with severity tags, environment assessment, and recommended next steps.</p>
     </div>
   </div>
 </div>
@@ -261,7 +261,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.13 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.14 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>

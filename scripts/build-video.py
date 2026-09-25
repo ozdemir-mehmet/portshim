@@ -2,10 +2,10 @@
 """
 build-video.py — Parse a PortShim video script and generate:
   - Per-scene narration audio (WAV via Kokoro)
-  - Per-scene slide images (PNG, 1920×1080, SSW styling)
+  - Per-scene slide images (PNG, 1920×1080, report styling)
 
 Usage:
-    python scripts/build-video.py references/operator-guide/scripts/01-quick-start-script.md --out output/01-quick-start/
+    python scripts/build-video.py path/to/your-script.md --out output/video/
 """
 
 import os
@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-# ── SSW Brand Colours ──
+# ── Report palette ──
 RED = (204, 65, 65)
 DARK = (51, 51, 51)
 MED = (121, 121, 121)

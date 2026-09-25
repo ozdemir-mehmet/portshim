@@ -12,6 +12,7 @@ venv/
 Thumbs.db
 ~$*
 outputs/
+output/
 configs/
 logs/
 .hermes/

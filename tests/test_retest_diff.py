@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 # Load retest_diff module directly by file path (avoid sys.path issues during pytest collection)
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "skills" / "site-assessment-pipeline" / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 _retest_diff_path = SCRIPTS_DIR / "retest-diff.py"
 _spec = importlib.util.spec_from_file_location("retest_diff", str(_retest_diff_path))
 _retest_diff = importlib.util.module_from_spec(_spec)

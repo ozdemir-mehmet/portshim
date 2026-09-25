@@ -265,7 +265,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('script')
     p.add_argument('--out','-o', default='output/shorts/')
-    p.add_argument('--music', default='references/operator-guide/bensound-onrepeat.mp3')
+    p.add_argument('--music', default=None, help='Background music track (optional; bring your own file)')
     p.add_argument('--audio-only', action='store_true')
     p.add_argument('--slides-only', action='store_true')
     p.add_argument('--assemble-only', action='store_true')
@@ -284,8 +284,8 @@ def main():
     
     if not args.audio_only and not args.slides_only:
         print('\nAssembling shorts...')
-        music = Path(args.music)
-        if not music.exists():
+        music = Path(args.music) if args.music else None
+        if music and not music.exists():
             print(f'WARNING: Music not found at {music}')
             music = None
         assemble_shorts(shorts, args.out, str(music.resolve()) if music else None)

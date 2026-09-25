@@ -361,7 +361,7 @@ def generate_findings(hosts: list[dict], use_nvd: bool = True,
 
 def classify_devices(xml_path: str) -> dict[str, dict]:
     """Run topology.py + device-classifier.py and return {ip: {device_type, device_vendor}}."""
-    scripts_dir = Path(__file__).resolve().parent.parent / "skills" / "site-assessment-pipeline" / "scripts"
+    scripts_dir = Path(__file__).resolve().parent
     topology_py = scripts_dir / "topology.py"
     classifier_py = scripts_dir / "device-classifier.py"
 

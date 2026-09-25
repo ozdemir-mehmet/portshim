@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = PROJECT_ROOT / "skills" / "site-assessment-pipeline" / "scripts"
+SCRIPTS = PROJECT_ROOT / "scripts"
 VENV_PYTHON = str(PROJECT_ROOT / ".venv" / "bin" / "python")
 PYTHON = VENV_PYTHON if Path(VENV_PYTHON).exists() else sys.executable
 UAT_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "uat"

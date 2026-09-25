@@ -113,18 +113,19 @@ python portshim scan 10.0.0.0/22 --dry-run                  # Preview only
 ### Generate reports
 ```bash
 python portshim configure llm local --output-dir ./configs/
-python skills/site-assessment-pipeline/scripts/report-gen.py \
+python scripts/report-gen.py \
   outputs/phase4-findings.json --output-dir outputs/reports --format all
-# Produces: report.docx, brief.pptx, report.pdf, checklist.xlsx
+# Produces: report.docx, brief.pptx, report.pdf
+# The Excel remediation checklist is a separate tool: python scripts/excel-checklist.py
 ```
 
 ### Sample Reports
 
-Preview of each format from a de-identified assessment — see them on the [Reports page](https://ozdemir-mehmet.github.io/portshim/pages/reports.html#sample-reports) or below:
+Preview of each format, rendered from a synthetic sample assessment — example findings for reserved hostnames with a documentation range printed as the scan's network, not a live engagement. Each image carries the label the generator draws under every page — *Synthetic sample data — example findings and a documentation range, not a live network* — so a screenshot lifted out of this page still says what it is. See them on the [Reports page](https://ozdemir-mehmet.github.io/portshim/pages/reports.html#sample-reports) or below:
 
 <div align="center">
   <a href="https://ozdemir-mehmet.github.io/portshim/pages/reports.html#sample-reports">
-    <img src="images/reports/sample-docx-content.png" width="600" alt="DOCX report findings table">
+    <img src="images/reports/sample-docx-content.png" width="600" alt="DOCX report findings table, synthetic sample data">
   </a>
   <br>
   <sub><em>DOCX technical report — executive summary, severity-coloured findings table, per-finding detail with CVSS scores and remediation. <a href="https://ozdemir-mehmet.github.io/portshim/pages/reports.html#sample-reports">See all formats →</a></em></sub>
@@ -140,14 +141,7 @@ All on AMD Radeon 8060S, llama.cpp b9870 Vulkan, Q4_K_M quant:
 |-------|----------|----------|------|------|
 | **Qwen3-Coder 30B (A3B)** | 447.5 | 82.7 | 17.3 GB | Recon, CVE analysis, general |
 | **SuperGemma4 26B (A4B)** | 525.4 | 59.6 | 15.6 GB | Exploit, reporting |
-| **HauhauCS 35B (A3B)** | 481.0 | 71.6 | 18.5 GB | Alternative exploit (PARTIAL on Phase 3) |
-
-## Key Learnings
-
-- **Gate 1 host summaries must use structured XML** (`topology.py --gate1`) — raw terminal output truncates and hides hosts.
-- **"Uncensored" labels don't predict exploit quality.** HauhauCS 35B scored PARTIAL on Phase 3 despite being labelled "aggressive uncensored" — Qwen3-Coder 30B and SuperGemma4 26B both passed fully.
-- **Lightweight exploit tools** (hydra, sshpass, paramiko) are included in the base deploy. Metasploit is optional via `--with-msf`.
-- **PDF reports** use weasyprint — pure Python, no LibreOffice needed.
+| **HauhauCS 35B (A3B)** | 481.0 | 71.6 | 18.5 GB | Alternative exploit |
 
 ## Wireless Assessment
 
@@ -183,5 +177,5 @@ Apache 2.0 — use it, modify it, share it. Authorised security testing only.
 
 <p align="center">
   <sub>Built with <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a> · Powered by Vulkan · Backed by benchmarks</sub><br>
-  <sub><a href="https://youtu.be/dQw4w9WgXcQ?autoplay=1">Cal-Met Corp Industries</a></sub>
+  <sub>PortShim</sub>
 </p>

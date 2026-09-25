@@ -135,7 +135,7 @@
 
 <h2>Phase 1 — Reconnaissance</h2>
 <p>Full network sweep using nmap with all-port scanning, OS detection, and service versioning. Device classification assigns roles (40+ types — router, switch, printer, CCTV, PLC, etc.). Topology mapping builds a network graph.</p>
-<p><strong>Key scripts:</strong> <code>topology.py</code> — parses XML output, classifies devices, builds topology map. <code>stealth-profiles.py</code> — adjusts timing and parallelism per engagement profile.</p>
+<p><strong>Key scripts:</strong> <code>topology.py</code> — parses XML output, classifies devices, builds topology map. <code>engagement-profiles.py</code> — adjusts timing and parallelism per engagement profile.</p>
 <p><strong>Gate 1:</strong> <code>topology.py --gate1</code> produces never-truncated host summaries. Operator reviews the full device inventory before proceeding.</p>
 
 <h2>Phase 2 — Vulnerability Analysis</h2>
@@ -184,7 +184,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.13 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.14 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>

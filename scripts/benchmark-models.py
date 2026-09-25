@@ -256,6 +256,8 @@ def main():
     parser.add_argument("--cloud-only", action="store_true")
     parser.add_argument("--local-only", action="store_true")
     parser.add_argument("--model", help="Test only a specific model (by name substring)")
+    parser.add_argument("--out", default="outputs/llm-model-matrix.md",
+                        help="Where to write the results matrix (default: outputs/)")
     args = parser.parse_args()
 
     results = {}
@@ -362,7 +364,7 @@ def main():
         print(f"  {phase_labels.get(pk, pk)}: {best}")
 
     # Save results
-    out_path = Path("references/benchmarks/llm-model-matrix.md")
+    out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         f.write("# LLM Model Benchmark Matrix\n\n")

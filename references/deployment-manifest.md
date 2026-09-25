@@ -64,18 +64,21 @@ cp /tmp/nmap-vulners/vulners.nse ~/.nmap/scripts/
 nmap --script-updatedb
 ```
 
-## Anthropic Skills
+## Anthropic Cybersecurity Skills
 
 ```bash
-# See references/anthropic-skills-manifest.md for full command
-# Or run: bash scripts/install-skills.sh
+python3 deploy.py             # installs them; --skip-skills omits them
 ```
 
-## Project Skills → Hermes
+These are Anthropic's own published cybersecurity skills, fetched from their repository.
+They are not part of this tree, and nothing here depends on them being present.
+
+## Harness → Your Agent
 
 ```bash
-bash scripts/install-skills.sh
-# Then in Hermes: /reload-skills
+# No installer script ships. The harness is exposed to an agent with one shell
+# alias and one instruction file — copy the two commands from
+# references/agent-integration.md, section "Exposing it to an agent".
 ```
 
 ## Verify
@@ -85,6 +88,6 @@ nmap --version
 nuclei --version
 httpx --version
 python -c "import openpyxl; print('OK')"
-python scripts/check-skill-freshness.py
-hermes skills list | grep site-assessment
+python3 portshim --help
+python3 portshim discover --fast      # exercises the network path, read-only
 ```

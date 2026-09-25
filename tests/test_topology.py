@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 # Ensure the scripts directory is importable
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "skills" / "site-assessment-pipeline" / "scripts"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from topology import (
