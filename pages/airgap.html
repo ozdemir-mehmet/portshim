@@ -175,29 +175,11 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.16 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.17 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>
 
-<script>
-  (function() {
-    const toggle = document.getElementById('themeToggle');
-    const KEY = 'portshim-theme';
-    function setTheme(t) {
-      document.documentElement.setAttribute('data-theme', t);
-      toggle.textContent = t === 'dark' ? '🌙' : '☀️';
-      try { localStorage.setItem(KEY, t); } catch {}
-    }
-    const saved = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
-    if (saved) { setTheme(saved); }
-    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) { setTheme('light'); }
-    else { setTheme('dark'); }
-    toggle.addEventListener('click', () => {
-      const c = document.documentElement.getAttribute('data-theme');
-      setTheme(c === 'light' ? 'dark' : 'light');
-    });
-  })();
-</script>
+<script src="../assets/theme.js"></script>
 </body>
 </html>

@@ -540,24 +540,11 @@ which llama-server iw nmcli airmon-ng airodump-ng aireplay-ng aircrack-ng \
       <a href="https://github.com/ozdemir-mehmet/portshim">GitHub</a>
       <a href="https://hermes-agent.nousresearch.com">Hermes Agent</a>
     </div>
-    <p>PortShim v0.5.16 — Picking the network, one port at a time</p>
+    <p>PortShim v0.5.17 — Picking the network, one port at a time</p>
   </div>
 </footer>
 
-<script>
-  // Theme toggle
-  const toggle = document.getElementById('themeToggle');
-  const html = document.documentElement;
-  const stored = localStorage.getItem('ps-theme');
-  if (stored) html.setAttribute('data-theme', stored);
-  toggle.textContent = html.getAttribute('data-theme') === 'light' ? '☀️' : '🌙';
-  toggle.addEventListener('click', () => {
-    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-    html.setAttribute('data-theme', next);
-    toggle.textContent = next === 'light' ? '☀️' : '🌙';
-    localStorage.setItem('ps-theme', next);
-  });
-</script>
+<script src="../assets/theme.js"></script>
 
 </body>
 </html>

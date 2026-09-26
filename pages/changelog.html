@@ -123,7 +123,12 @@
 
 <section class="page-content">
   <div class="container">
-    <h3>v0.5.16 <small>2026-09-26</small></h3>
+    <h3>v0.5.17 <small>2026-09-27</small></h3>
+<h4>Fixed</h4>
+<ul>
+<li>The theme toggle now honours the choice made on any page, on every page. Two of the site's pages — <code>dependencies.html</code> and <code>wireless.html</code> — kept their own copy of the theme script written against a storage key of their own, so a theme chosen anywhere else was ignored on those two and they moved together with each other. All ten pages now load one shared implementation from a single script: the theme is stored under one key, a value left by the old key is migrated once on the first page visited after this release, and a first visit to either of those two pages now follows the operating system preference rather than the markup's default.</li>
+</ul>
+<h3>v0.5.16 <small>2026-09-26</small></h3>
 <h4>Changed</h4>
 <ul>
 <li>The release boundary check now accounts for every byte of every file it reads. Instead of trusting each reader to declare the ranges it handles, the check records what each reader actually consumed and fails the release when a byte inside a container was read by no reader — so a reader that skips a range, or a call site that stops passing a declaration another call site passes, is a failed check rather than a hole in one. A declaration is satisfied only by a decoded range and never by a claim; where a reader stops at a read cap, its claim is trimmed to the bytes it actually read and the trim is reported; and an archive the check refuses to open beside one it accepts reports the refusal rather than dropping it. Verified against a tree built the way this repository builds one: the file count, the scan-through reads, the six conditions and the cleared-line count are unchanged, the coverage audit is clean, and the run exits 0.</li>
@@ -374,29 +379,11 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.16 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.17 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>
 
-<script>
-  (function() {
-    const toggle = document.getElementById('themeToggle');
-    const KEY = 'portshim-theme';
-    function setTheme(t) {
-      document.documentElement.setAttribute('data-theme', t);
-      toggle.textContent = t === 'dark' ? '🌙' : '☀️';
-      try { localStorage.setItem(KEY, t); } catch {}
-    }
-    const saved = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
-    if (saved) { setTheme(saved); }
-    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) { setTheme('light'); }
-    else { setTheme('dark'); }
-    toggle.addEventListener('click', () => {
-      const c = document.documentElement.getAttribute('data-theme');
-      setTheme(c === 'light' ? 'dark' : 'light');
-    });
-  })();
-</script>
+<script src="../assets/theme.js"></script>
 </body>
 </html>

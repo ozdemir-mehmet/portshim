@@ -2,6 +2,11 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.17] — 2026-09-27
+
+### Fixed
+- The theme toggle now honours the choice made on any page, on every page. Two of the site's pages — `dependencies.html` and `wireless.html` — kept their own copy of the theme script written against a storage key of their own, so a theme chosen anywhere else was ignored on those two and they moved together with each other. All ten pages now load one shared implementation from a single script: the theme is stored under one key, a value left by the old key is migrated once on the first page visited after this release, and a first visit to either of those two pages now follows the operating system preference rather than the markup's default.
+
 ## [v0.5.16] — 2026-09-26
 
 ### Changed
