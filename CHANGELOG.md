@@ -2,6 +2,11 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.16] — 2026-09-26
+
+### Changed
+- The release boundary check now accounts for every byte of every file it reads. Instead of trusting each reader to declare the ranges it handles, the check records what each reader actually consumed and fails the release when a byte inside a container was read by no reader — so a reader that skips a range, or a call site that stops passing a declaration another call site passes, is a failed check rather than a hole in one. A declaration is satisfied only by a decoded range and never by a claim; where a reader stops at a read cap, its claim is trimmed to the bytes it actually read and the trim is reported; and an archive the check refuses to open beside one it accepts reports the refusal rather than dropping it. Verified against a tree built the way this repository builds one: the file count, the scan-through reads, the six conditions and the cleared-line count are unchanged, the coverage audit is clean, and the run exits 0.
+
 ## [v0.5.15] — 2026-09-26
 
 ### Added

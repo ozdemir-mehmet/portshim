@@ -12,6 +12,14 @@ silently. Conditions 4 and 5 are the two hand-maintained lists the document says
 cannot be derived (an agent instruction is syntax, and a learning marker is a
 heuristic); condition 6 is a manifest rather than a list.
 
+A seventh check, labelled AUDIT rather than numbered, is not one of the document's rules: it
+is `Coverage`'s own accounting (issue #49) of every byte a reader was given, in every file and
+every space recognised inside one. It exists because conditions 3 and 5 are only as good as the
+claim that a file was read in full, and that claim used to be a hand-threaded pair of optional
+lists a reader could forget to populate — found as the same class of bug at a new call site in
+nearly every review round. `Coverage` is now required everywhere a reader reads, so a byte with
+no reader fails the file rather than clearing it in silence.
+
 Usage:
     python3 scripts/boundary-check.py TREE
         [--doc PATH]        classification document (default: this repo's)
@@ -122,6 +130,12 @@ ARCHIVE_START_LIMIT = 32
 ARCHIVE_END_TRIES = 4
 ZIP64_LOCATOR = b"PK"
 ZIP64_EOCD = b"PK"
+# A local header's 32-bit size fields hold this sentinel when the real size lives in the
+# header's zip64 extra field instead — streamed writers (`ZipFile.open(..., force_zip64=True)`)
+# use it whenever the size cannot be known before the data is written. Read as a size rather
+# than as "unknown", it disagrees with the central directory's real, resolved size by
+# construction, not because the two genuinely differ.
+ZIP64_SENTINEL_32 = 0xFFFFFFFF
 ZIP_NESTING_LIMIT = 3
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ZIP_LOCAL_HEADER = b"PK\x03\x04"
@@ -192,6 +206,208 @@ class Finding:
 
     def __str__(self) -> str:
         return f"[{self.condition}] {self.location}: {self.detail}"
+
+
+# ── Coverage: the audit that replaces hand-derived span/space registration ───
+
+
+class Coverage:
+    """The byte ranges a reader consumed in one coordinate frame, and the spaces —
+    bytes with no offsets in that frame — recognised inside it.
+
+    This is the single object that replaces the old `spans_out`/`spaces_out` pair. It is
+    a required argument everywhere a reader reads: there is no default and no `is not
+    None` guard, so a reader cannot be called in a way that skips registration, and a
+    call site cannot forget to forward it. Every reader gets a `Coverage` whose frame
+    already matches the bytes it was handed — offset 0 is the first byte it was given —
+    so a reader never has to know whether those bytes are the file's own or a payload
+    something else produced; it only ever calls `consumed()` in its own local
+    coordinates.
+
+    Two kinds of child frame carry that translation:
+
+    - `view()` is a sub-range of the *same* underlying bytes — one archive among several
+      concatenated in a file, a member's stored (uncompressed) payload, a gap between two
+      structures. Registrations made through a view land in the root frame's own range
+      list, translated by the view's offset, so `uncovered()` on the root sees them
+      without the view needing separate accounting.
+    - `space()` is for bytes that exist nowhere in this frame — inflated, decoded,
+      decompressed, or joined from pieces found elsewhere. It gets a fresh coordinate
+      frame of its own, with its own extent and its own audit, and is recorded as a space
+      of the frame that recognised it.
+
+    `bound()` records a limit that fired (a cap, a budget, a nesting limit) so the audit
+    can report the bound that stopped work rather than treating the unread bytes as an
+    unexplained hole.
+    """
+
+    __slots__ = ("extent", "label", "_offset", "_sink", "_ranges", "_readers", "_spaces", "_bounds", "_decoded_ranges", "_declared_regions")
+
+    def __init__(self, extent: int, label: str = "") -> None:
+        self.extent = extent
+        self.label = label
+        self._offset = 0
+        self._sink = self
+        self._ranges: list[tuple[int, int]] = []
+        self._readers: set[str] = set()
+        self._spaces: list[tuple[bytes, "Coverage"]] = []
+        self._bounds: list[tuple[str, str]] = []
+        self._decoded_ranges: list[tuple[int, int]] = []
+        self._declared_regions: list[tuple[int, int, str]] = []
+
+    def consumed(self, start: int, end: int, reader: str) -> None:
+        """Record that `reader` read `data[start:end]` in this frame's own coordinates."""
+        if end <= start:
+            return
+        sink = self._sink
+        sink._ranges.append((start + self._offset, end + self._offset))
+        sink._readers.add(reader)
+
+
+    def decoded(self, start: int, end: int, reader: str) -> None:
+        if end <= start:
+            return
+        sink = self._sink
+        sink._decoded_ranges.append((start + self._offset, end + self._offset))
+        sink._readers.add(reader)
+
+    def declare(self, start: int, end: int, what: str) -> None:
+        if end <= start:
+            return
+        sink = self._sink
+        sink._declared_regions.append((start + self._offset, end + self._offset, what))
+
+    def declared_regions(self) -> list[tuple[int, int, str]]:
+        lo, hi = self._offset, self._offset + self.extent
+        out: list[tuple[int, int, str]] = []
+        for start, end, what in self._sink._declared_regions:
+            s, e = max(start, lo), min(end, hi)
+            if e > s:
+                out.append((s - self._offset, e - self._offset, what))
+        return out
+
+    def _merged_decoded_ranges(self) -> list[tuple[int, int]]:
+        lo, hi = self._offset, self._offset + self.extent
+        decoded: list[tuple[int, int]] = []
+        for start, end in self._sink._decoded_ranges:
+            s, e = max(start, lo), min(end, hi)
+            if e > s:
+                decoded.append((s - self._offset, e - self._offset))
+        
+        merged: list[tuple[int, int]] = []
+        for start, end in sorted(r for r in decoded if r[1] > r[0]):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        return merged
+
+    def undecoded_declarations(self) -> list[tuple[int, int, str]]:
+        decoded = self._merged_decoded_ranges()
+        findings = []
+        for start, end, what in self.declared_regions():
+            uncovered = [(start, end)]
+            for d_start, d_end in decoded:
+                next_uncovered = []
+                for u_start, u_end in uncovered:
+                    if d_end <= u_start or d_start >= u_end:
+                        next_uncovered.append((u_start, u_end))
+                    else:
+                        if u_start < d_start:
+                            next_uncovered.append((u_start, d_start))
+                        if d_end < u_end:
+                            next_uncovered.append((d_end, u_end))
+                uncovered = next_uncovered
+            for u_start, u_end in uncovered:
+                findings.append((u_start, u_end, what))
+        return findings
+
+    def view(self, offset: int, extent: int, label: str = "") -> "Coverage":
+        """A sub-range of this same frame, e.g. one archive slice among several."""
+        v = Coverage(extent, label or self.label)
+        v._sink = self._sink
+        v._offset = self._offset + offset
+        return v
+
+    def space(self, data: bytes, label: str) -> "Coverage":
+        """A fresh frame for bytes that exist nowhere in this one, recognised here."""
+        child = Coverage(len(data), label)
+        self._sink._spaces.append((data, child))
+        return child
+
+    def bound(self, name: str, detail: str) -> None:
+        """A cap or budget that stopped a reader, so the audit can name it rather than
+        report the bytes past it as an unexplained hole."""
+        self._sink._bounds.append((name, detail))
+        self._sink._readers.add(name)
+
+    def ranges(self) -> list[tuple[int, int]]:
+        """The ranges consumed in this frame's own coordinates, one per `consumed()` call.
+
+        Translated back out of the sink's coordinates and clamped to this frame's own window,
+        so a view sees only the registrations that fall inside the slice it scopes — the same
+        translation `consumed()` applies going in, run in reverse.
+        """
+        lo, hi = self._offset, self._offset + self.extent
+        out: list[tuple[int, int]] = []
+        for start, end in self._sink._ranges:
+            s, e = max(start, lo), min(end, hi)
+            if e > s:
+                out.append((s - self._offset, e - self._offset))
+        return out
+
+    def edges(self) -> list[int]:
+        """The boundaries between consumed ranges, derived from the ranges themselves —
+        never hand-built by a caller."""
+        points: set[int] = set()
+        for start, end in self.ranges():
+            points.add(start)
+            points.add(end)
+        return sorted(points)
+
+    def space_edges(self) -> list[tuple[bytes, list[int]]]:
+        """Every space recognised inside this frame, flattened recursively.
+
+        A container stored compressed inside a container stored compressed nests one space
+        inside another; the sweep has to see both, at whatever depth they sit, so a space's
+        own spaces are flattened in rather than requiring a caller to walk the tree.
+        """
+        out: list[tuple[bytes, list[int]]] = []
+        for data, child in self._spaces:
+            out.append((data, child.edges()))
+            out.extend(child.space_edges())
+        return out
+
+    def readers(self) -> list[str]:
+        return sorted(self._sink._readers)
+
+    def _merged_ranges(self) -> list[tuple[int, int]]:
+        merged: list[tuple[int, int]] = []
+        for start, end in sorted(r for r in self.ranges() if r[1] > r[0]):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        return merged
+
+    def uncovered(self) -> list[tuple[int, int]]:
+        """Every byte of this frame's own extent that no registered reader consumed."""
+        gaps: list[tuple[int, int]] = []
+        at = 0
+        for start, end in self._merged_ranges():
+            if start > at:
+                gaps.append((at, start))
+            at = max(at, end)
+        if at < self.extent:
+            gaps.append((at, self.extent))
+        return gaps
+
+    def all_frames(self) -> "list[Coverage]":
+        """This frame and every space nested inside it, recursively — what the audit walks."""
+        out = [self]
+        for _, child in self._spaces:
+            out.extend(child.all_frames())
+        return out
 
 
 # ── Derivation: the classification tables and the term block ─────────────────
@@ -377,21 +593,25 @@ def _printable_run_spans(data: bytes, minimum: int = 6) -> list[tuple[int, int]]
 
 
 def _is_one_character_shift(a: str, b: str) -> bool:
-    """Whether one of these lines is the other with a single character dropped from an end.
+    """Whether one of these lines is the other's decode one byte along.
 
-    That is exactly what reading the same bytes one byte along produces: the pairs are taken
-    from a different starting byte, so one character falls off one end and a byte joins the
-    other. Comparing for containment in general is wrong in both directions — a garbage decode
-    can be longer and contain the true line, which would drop the line carrying the term —
-    where this relation only ever pairs a line with its own shifted view, and a shift at
-    either end leaves the term itself intact on the line that is kept.
+    Reading the same bytes from a start one byte later drops a character from the front,
+    and — when the two decodes cover the same byte range rather than one running past the
+    other's end — the trailing character differs too, because the last pair no longer lines
+    up: `a[1:]` is not `b` whole, it is `b` with its own last character gone. Both shapes are
+    the same alignment, one byte apart, and checking only the first missed the second: two
+    views "one character apart" at *both* ends were treated as two different lines and a
+    marker sitting in the middle of both was reported twice for one occurrence.
     """
     if a == b:
         return True
-    return a[1:] == b or b[1:] == a or a[:-1] == b or b[:-1] == a
+    return (
+        a[1:] == b or b[1:] == a or a[:-1] == b or b[:-1] == a
+        or a[1:] == b[:-1] or b[1:] == a[:-1]
+    )
 
 
-def _utf16_views(data: bytes) -> str:
+def _utf16_views(data: bytes, cov: Coverage) -> str:
     """The four ways a byte range can hold UTF-16 text, without the shifted views.
 
     Two alignments and two endiannesses, because a path at an odd offset decodes to garbage
@@ -404,36 +624,64 @@ def _utf16_views(data: bytes) -> str:
     in another one puts its term in the line that contains it, and that line is still reported.
     Only lines of a similar length are compared, because a shifted view differs by one
     character and every other pairing is a coincidence, not an alignment.
+
+    A single stray byte inserted between two correctly-encoded halves of a term shifts every
+    pair after it, so *no* one alignment decodes both halves: one alignment carries the first
+    half cleanly to the stray byte and garbles everything past it, another carries the second
+    half cleanly from one byte later and garbles everything before it. Each half survives
+    whole, on its own line, in a *different* view — which is exactly the shape the run-joined
+    space exists for, applied here instead of to raw printable runs: the surviving pieces,
+    concatenated in the order their inferred byte offsets put them, are a space of their own,
+    with an edge at every join, so a term split this way is found by the sweep even though no
+    single decode ever produced it as one line. The byte offset is inferred, not exact —
+    `errors="ignore"` can drop a lone surrogate half and shift the mapping — which is why this
+    is a space rather than a claim about the file's own bytes.
     """
-    views: list[tuple[int, list[str]]] = []
-    for index, (start, enc) in enumerate(((0, "utf-16-le"), (0, "utf-16-be"), (1, "utf-16-le"), (1, "utf-16-be"))):
+    pieces: list[tuple[int, str]] = []
+    for start, enc in ((0, "utf-16-le"), (0, "utf-16-be"), (1, "utf-16-le"), (1, "utf-16-be")):
         try:
             # Three characters, not `RUN_MINIMUM`: what comes out of a UTF-16 decode is text,
             # not a run of printable bytes in binary, and the shortest marker this check
             # searches for is three characters. Holding this pass to the binary filter dropped
             # every short marker written in UTF-16 — in a gap, in a member, anywhere.
-            decoded = printable_runs(data[start:].decode(enc, "ignore").encode("utf-8", "replace"), 3)
+            decoded = data[start:].decode(enc, "ignore")
         except Exception:
             continue
-        views.append((index, [line for line in decoded.split("\n") if line]))
+        for m in re.finditer(r"[\x20-\x7e]{3,}", decoded):
+            # ASCII characters decode to identical single bytes under UTF-8, so a character
+            # index in `decoded` maps to a byte pair at `start + 2 * index` for every pair this
+            # loop matched against — exact up to the first ignored byte, which is the caveat
+            # the docstring names.
+            pieces.append((start + 2 * m.start(), m.group(0)))
     # Longest first, so the line that survives a shift family is the longest one in it — a
     # shift at either end leaves the term itself intact, so the longest line carries every
     # term the shorter ones do, and the order the four views happen to be tried in stops
     # deciding what gets reported. Length is also the tie-break a garbage decode loses:
     # reading the wrong alignment of real text yields nothing printable, not something longer.
-    kept: list[str] = []
-    for line in sorted((line for _, lines in views for line in lines), key=len, reverse=True):
-        if any(_is_one_character_shift(line, other) for other in kept):
+    kept: list[tuple[int, str]] = []
+    for offset, line in sorted(pieces, key=lambda p: len(p[1]), reverse=True):
+        if any(_is_one_character_shift(line, other) for _, other in kept):
             continue
-        kept.append(line)
-    return "\n".join(kept)
+        kept.append((offset, line))
+    ordered = sorted(kept, key=lambda p: p[0])
+    if ordered:
+        encoded = [line.encode("utf-8", "replace") for _, line in ordered]
+        # Registered here, where the pieces are recognised, not by a caller: every caller of
+        # `_utf16_views` inherits it, which is what closed the class — the same space used to
+        # be missing at the file level while a different call site had it.
+        space = cov.space(b"".join(encoded), "utf16-view-joined")
+        at = 0
+        for piece in encoded:
+            space.consumed(at, at + len(piece), "utf16-view")
+            at += len(piece)
+    return "\n".join(line for _, line in kept)
 
 
 def _inflate_local_headers(
     data: bytes,
+    cov: Coverage,
     depth: int = 0,
     budget: int = INFLATE_BYTES_LIMIT,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
 ) -> tuple[str, str | None]:
     """Text behind local headers that no member reader accounted for.
 
@@ -461,13 +709,14 @@ def _inflate_local_headers(
         head = data[at:at + 30]
         if len(head) < 30:
             continue
-        flags = int.from_bytes(head[6:8], "little")
         method = int.from_bytes(head[8:10], "little")
         csize = int.from_bytes(head[18:22], "little")
         name_len = int.from_bytes(head[26:28], "little")
         extra_len = int.from_bytes(head[28:30], "little")
         if method != 8 or remaining <= 0:
-            continue  # stored, or nothing left of the budget
+            continue  # stored, or nothing left of the budget — the outer binary-reader pass
+            # over these same bytes still accounts for them; only a header actually inflated
+            # here needs its own registration.
         body = at + 30 + name_len + extra_len
         if body >= len(data):
             continue
@@ -489,6 +738,24 @@ def _inflate_local_headers(
         read_past_the_declared_size = next_structure > declared_stop
         stop = next_structure if read_past_the_declared_size else declared_stop
         blob = data[body:stop][:INFLATE_BYTES_LIMIT]
+        # The header and the compressed region it declares: read here, as this ghost member's
+        # own structure, whether or not the stream inside it inflates cleanly — an attempt that
+        # fails is still an attempt, and the bytes are not left for the complement to find.
+        # Capped at `body + len(blob)`, not `stop`: the `INFLATE_BYTES_LIMIT` slice above is
+        # the bytes this reader actually took, and a claim past it would cover a tail the cap
+        # left unread as though it had been.
+        cov.consumed(at, body, "ghost-local-header")
+        cov.consumed(body, body + len(blob), "ghost-local-header-payload")
+        if min(stop, len(data)) - body > len(blob):
+            cov.bound(
+                "ghost-local-header-cap",
+                f"a local header no directory record lists holds more than the "
+                f"{INFLATE_BYTES_LIMIT // 1048576} MB inflate cap; the bytes past it were not read",
+            )
+            reasons.append(
+                f"a local header no directory record lists holds more than the "
+                f"{INFLATE_BYTES_LIMIT // 1048576} MB inflate cap; the bytes past it were not read"
+            )
         # Successive streams, not just the first: a blob can hold two raw-deflate streams
         # back to back, and `unused_data` is where the second one sits. Reading only the first
         # left the rest unread while the file was reported read in full — the same shape the
@@ -508,6 +775,8 @@ def _inflate_local_headers(
                 break
         except zlib.error:
             continue
+        cov.declare(body, body + len(blob), "ghost-local-header-payload")
+        cov.decoded(body, body + len(blob), "ghost-local-header-inflate")
         raw = b"".join(stream_pieces)
         if decompressor.unused_data:
             reasons.append(
@@ -526,31 +795,37 @@ def _inflate_local_headers(
         # unread, because the readers that follow a container or decode another encoding
         # were never called. The depth bound is the same one the member path uses, so a
         # container chain cannot be extended by parking it behind a stray header.
+        #
+        # These bytes exist nowhere in the file — they are what `raw` decompressed to — so
+        # they get a space of their own, registered here where they are recognised.
+        raw_cov = cov.space(raw, "ghost-header-payload")
         if depth >= ZIP_NESTING_LIMIT:
             pieces.append(printable_runs(raw))
+            raw_cov.consumed(0, len(raw), "printable-run")
+            raw_cov.bound("nesting-limit", f"content {ZIP_NESTING_LIMIT} containers deep was searched only for printable text")
             reasons.append(
                 f"content {ZIP_NESTING_LIMIT} containers deep behind a local header no directory record lists "
                 "was searched only for printable text"
             )
         else:
-            nested, nested_reason = _scan_member_blob(raw, depth + 1, runs=True, spaces_out=spaces_out)
+            nested, nested_reason = _scan_member_blob(raw, raw_cov, depth + 1, runs=True)
             pieces.append(nested)
             if nested_reason:
                 reasons.append(nested_reason)
     if over_limit:
+        cov.bound("local-header-limit", f"more than {ZIP_MEMBER_LIMIT} local headers in bytes no member reader accounted for; the rest were not searched")
         reasons.append(f"more than {ZIP_MEMBER_LIMIT} local headers in bytes no member reader accounted for; the rest were not searched")
     if remaining <= 0:
+        cov.bound("inflate-budget", f"the {INFLATE_BYTES_LIMIT // 1048576} MB inflate budget was reached in the bytes outside every member; what came after it was not searched in full")
         reasons.append(f"the {INFLATE_BYTES_LIMIT // 1048576} MB inflate budget was reached in the bytes outside every member; what came after it was not searched in full")
     return "\n".join(p for p in pieces if p), "; ".join(reasons) if reasons else None
 
 
 def _binary_readers(
     data: bytes,
+    cov: Coverage,
     runs: bool = True,
     depth: int = 0,
-    spans_out: list[tuple[int, int]] | None = None,
-    origin: int = -1,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
 ) -> tuple[str, str | None]:
     """The readers every non-text file gets: printable runs, PNG text chunks,
     PDF-style zlib payloads and the raw deflate behind a local header. One definition,
@@ -561,6 +836,15 @@ def _binary_readers(
     written in, so dropping it changes no finding — except that it stops a member's own
     text being discovered a second time, at a line number that exists in the concatenated
     report and nowhere in the member.
+
+    `cov` must already be scoped to `data` — offset 0 in `cov` is byte 0 of `data` — so this
+    function never has to know whether `data` is the file's own bytes or something a caller
+    produced; it only ever registers in its own local coordinates. It always claims the whole
+    of `data` first, under the plain "printable-run" reader: the run pass examines every byte
+    to decide what is and is not a run, whether or not any of it was long enough to report, so
+    that examination is what closes a plain binary file's coverage without needing every gap
+    between two runs decoded as text. The finer registrations below — the runs themselves, the
+    UTF-16 space, the inflated payloads — add edges on top of that baseline for the sweep.
     """
     # `RUN_MINIMUM` is six and *stays* six. Lowering it to three — the length of condition 5's
     # shortest marker — was tried, and measured against the real release tree it turned a
@@ -572,44 +856,39 @@ def _binary_readers(
     # is not allowed to carry: `test_run_minimum_is_no_wider_than_the_shortest_marker` pins
     # the relationship between the constant and the term list, and the readers pin the rest
     # to the document's lists, so the constant cannot silently become a blind spot.
+    cov.consumed(0, len(data), "printable-run")
     parts: list[str] = []
     run_spans: list[tuple[int, int]] = []
     if runs:
         parts.append(printable_runs(data, RUN_MINIMUM))
         run_spans = _printable_run_spans(data, RUN_MINIMUM)
+        for start, end in run_spans:
+            cov.consumed(start, end, "printable-run")
         # And again with the separators removed, swept as a space of its own rather than added to
         # the text: a term split by one non-printable byte is readable in two pieces and
         # invisible to every other reader here. The joined bytes are contiguous — that is the
         # whole point of joining them — so the sweep finds the term, and the edges are the joins,
         # which is exactly the boundary it straddles. Adding the joined text instead would report
-        # the same occurrence twice, once from the literal scan and once from the sweep.
+        # the same occurrence twice, once from the literal scan and once from the sweep. The
+        # edges come from registering each run in the joined space's own coordinates, not from a
+        # hand-built join list: the space's `edges()` derives them the same way any other one does.
         joined = printable_runs_joined(data, RUN_MINIMUM)
-        if joined and spaces_out is not None:
+        if joined:
+            space = cov.space(joined.encode("ascii", "replace"), "ascii-run-joined")
             at = 0
-            joins: list[int] = []
-            for start, end in run_spans[:-1]:
-                at += end - start
-                joins.append(at)
-            if joins:
-                spaces_out.append((joined.encode("ascii", "replace"), joins))
-    # Declare the runs, in the coordinates the caller gave: file offsets when `origin` is a
-    # real position in the file, a space of their own when the bytes were produced rather than
-    # found (a compressed member's body exists nowhere in the file). This parameter was dead
-    # code: nothing in this function touched `spans_out`, so a plain binary file — or a
-    # container's unaccounted-for gap bytes — came back with no declared edges at all, and a
-    # private path split by one non-printable byte, both halves well past RUN_MINIMUM, was
-    # cleared with no finding and `reason=None`.
-    if run_spans:
-        if origin >= 0 and spans_out is not None:
-            spans_out.extend((origin + start, origin + end) for start, end in run_spans)
-        elif origin < 0 and spaces_out is not None:
-            spaces_out.append((data, sorted({edge for start, end in run_spans for edge in (start, end)})))
-    parts.append(_utf16_views(data))
-    inflated, zlib_reason = _inflate_zlib_payloads(data, depth=depth, spaces_out=spaces_out)
+            for start, end in run_spans:
+                length = end - start
+                space.consumed(at, at + length, "printable-run")
+                at += length
+    parts.append(_utf16_views(data, cov))
+    for m in islice(PDF_STREAM.finditer(data), INFLATE_STREAM_LIMIT):
+        if _looks_deflate(m.group(1)):
+            cov.declare(m.start(1), m.end(1), "pdf-stream")
+    inflated, zlib_reason = _inflate_zlib_payloads(data, cov, depth=depth)
     parts.append(inflated)
     # Raw deflate behind a local header: the shape a member payload has, and the one the
     # zlib reader above cannot read.
-    deflated, header_reason = _inflate_local_headers(data, depth=depth, spaces_out=spaces_out)
+    deflated, header_reason = _inflate_local_headers(data, cov, depth=depth)
     parts.append(deflated)
     reason = "; ".join(r for r in (zlib_reason, header_reason) if r) or None
     return "\n".join(p for p in parts if p), reason
@@ -617,12 +896,8 @@ def _binary_readers(
 
 def _scan_outside(
     data: bytes,
-    spans: list[tuple[int, int]],
-    runs: bool = True,
+    cov: Coverage,
     depth: int = 0,
-    spans_out: list[tuple[int, int]] | None = None,
-    origin: int = 0,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
 ) -> tuple[str, str | None]:
     """Scan the container's bytes that no other reader has accounted for.
 
@@ -633,53 +908,40 @@ def _scan_outside(
     gaps between structures — and scanning *those* is what keeps a container's own bytes
     read without searching every member a second time and reporting each occurrence twice,
     at a line number that exists only in the concatenation.
+
+    The gaps come from `cov.uncovered()` rather than a hand-passed span list: every member,
+    record and end-record range was registered onto `cov` before this runs, so the object's
+    own audit of itself *is* the complement — the same computation that later fails a file
+    for an unaccounted byte is what finds the bytes worth scanning here.
     """
-    covered: list[tuple[int, int]] = []
-    for start, end in spans:
-        if 0 <= start < end <= len(data):
-            covered.append((start, end))
-    covered.sort()
     parts: list[str] = []
     reasons: list[str] = []
-    at = 0
-    for start, end in covered + [(len(data), len(data))]:
-        if start > at:
-            gap = data[at:start]
-            # The gap decoded as text, not only its printable runs. A container's own bytes are
-            # structure and text, and a short term — condition 5's markers are three characters
-            # — sits in a gap in the clear while the run pass's six-character minimum drops it;
-            # with the run pass as the gap's only reader, a marker prepended to a `.docx` or
-            # appended after its end record was covered by nothing and the file cleared with no
-            # reason. Decoding the gap whole is safe where a whole *file* decoded whole is not:
-            # a gap is bounded by structure, and a file whose bytes are arbitrary is gated by
-            # `looks_text` at the file level.
-            parts.append(_decode_text(gap))
-            if spans_out is not None and origin >= 0:
-                # Declared, because it was read: the decode above is this region's reader.
-                spans_out.append((origin + at, origin + start))
-            text, reason = _binary_readers(
-                gap,
-                runs=False,
-                depth=depth,
-                spans_out=spans_out,
-                origin=origin + at if origin >= 0 else -1,
-                spaces_out=spaces_out,
-            )
-            parts.append(text)
-            if reason:
-                reasons.append(reason)
-        at = max(at, end)
+    for start, end in cov.uncovered():
+        gap = data[start:end]
+        # The gap decoded as text, not only its printable runs. A container's own bytes are
+        # structure and text, and a short term — condition 5's markers are three characters
+        # — sits in a gap in the clear while the run pass's six-character minimum drops it;
+        # with the run pass as the gap's only reader, a marker prepended to a `.docx` or
+        # appended after its end record was covered by nothing and the file cleared with no
+        # reason. Decoding the gap whole is safe where a whole *file* decoded whole is not:
+        # a gap is bounded by structure, and a file whose bytes are arbitrary is gated by
+        # `looks_text` at the file level.
+        parts.append(_decode_text(gap))
+        cov.consumed(start, end, "gap-decode")
+        cov.decoded(start, end, "gap-decode")
+        text, reason = _binary_readers(gap, cov.view(start, end - start, "gap"), runs=False, depth=depth)
+        parts.append(text)
+        if reason:
+            reasons.append(reason)
     return "\n".join(p for p in parts if p), "; ".join(reasons) or None
 
 
 def _scan_member_blob(
     data: bytes,
+    cov: Coverage,
     depth: int = 0,
     runs: bool = True,
-    spans_out: list[tuple[int, int]] | None = None,
-    origin: int = -1,
-    local_spans_out: list[tuple[int, int]] | None = None,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
+    parent_span: tuple[Coverage, int, int] | None = None,
 ) -> tuple[str, str | None]:
     """Read a zip member the way the file-level scan reads a file.
 
@@ -691,9 +953,13 @@ def _scan_member_blob(
     because the bytes are the evidence and the extension is a claim. `depth` bounds the
     nesting, so a container inside a container inside a container stops being followed
     rather than recursing without end.
+
+    `cov` already carries the distinction the old `origin` parameter used to encode by sign:
+    a view when `data` is real bytes at some offset, a space when it was produced. Recursing
+    with the same `cov` is what lets a container inside a container inside a member inherit
+    its registration without this function — or its caller — having to know which kind of
+    frame it was handed.
     """
-    parts: list[str] = []
-    reasons: list[str] = []
     if _looks_like_zip(data):
         # The depth bound guards container extraction, not reading: a flat file reached
         # at the deepest allowed level is still a file, and returning early on depth
@@ -702,32 +968,18 @@ def _scan_member_blob(
             # The bound stops *descending*, not reading: the container's own bytes still
             # need the binary readers, exactly as a container this check refuses to open
             # does, or a UTF-16 path inside it is invisible.
-            text, reason = _binary_readers(
-                data, runs=runs, depth=depth, spans_out=spans_out, origin=origin, spaces_out=spaces_out
-            )
+            text, reason = _binary_readers(data, cov, runs=runs, depth=depth)
+            cov.bound("nesting-limit", f"container nested deeper than {ZIP_NESTING_LIMIT} levels was not searched")
             return text, "; ".join(r for r in (f"container nested deeper than {ZIP_NESTING_LIMIT} levels was not searched", reason) if r)
         # A nested container is read through the container reader, not scanned as bytes
         # twice: the caller decodes this member's own bytes as text already, which is
         # where a nested archive's member names and comment live, and this call adds the
         # deflated content behind them.
-        nested_spans: list[tuple[int, int]] = [] if local_spans_out is None else local_spans_out
-        text, reason = _inflate_zip(
-            data, depth + 1, runs=runs, spans_out=spans_out, origin=origin, spaces_out=spaces_out, local_spans_out=nested_spans
-        )
-        # A container whose bytes are nowhere in the file — it was decompressed, so `origin` is
-        # negative — has internal reader boundaries that no sweep over the file's own bytes can
-        # visit: an inner member's name is read by one call and its payload by another, and a
-        # term split across the two is invisible to a literal scan of either. Its boundaries
-        # become a space of its own, swept in their own coordinates. This registration lives
-        # *here*, where the container is recognised, rather than at each caller: the member path
-        # had it, and the ghost-header path and the decoded-payload path did not, which is the
-        # same missing registration found three rounds running at three different call sites.
-        if spaces_out is not None and origin < 0 and nested_spans:
-            entry = (data, sorted({edge for start, end in nested_spans for edge in (start, end)}))
-            if entry not in spaces_out:
-                spaces_out.append(entry)
-        return text, reason
-    return _binary_readers(data, runs=runs, depth=depth, spans_out=spans_out, origin=origin, spaces_out=spaces_out)
+        if parent_span:
+            p_cov, p_start, p_stop = parent_span
+            p_cov.decoded(p_start, p_stop, "member-container")
+        return _inflate_zip(data, cov, depth + 1, runs=runs)
+    return _binary_readers(data, cov, runs=runs, depth=depth)
 
 
 def _find_local_header_by_name(data: bytes, name: str) -> int:
@@ -823,7 +1075,7 @@ def _local_header_at(data: bytes, info: zipfile.ZipInfo, names: set[str]) -> tup
     )
 
 
-def _member_structural_text(data: bytes, info: zipfile.ZipInfo, at: int) -> str:
+def _member_structural_text(data: bytes, info: zipfile.ZipInfo, at: int, cov: Coverage) -> str:
     """Everything the container's own structures say about one member, read once.
 
     The name, the entry's comment, the entry's extra field and the local header's own copy of
@@ -840,7 +1092,7 @@ def _member_structural_text(data: bytes, info: zipfile.ZipInfo, at: int) -> str:
         # A comment is bytes like any other: UTF-16 text decoded as UTF-8 is mojibake, and
         # because the comment's bytes are inside a declared span the complement scan skips
         # them, so a private path written in UTF-16 here was read by nothing.
-        parts.append("\n" + _utf16_views(info.comment))
+        parts.append("\n" + _utf16_views(info.comment, cov))
     if info.extra:
         parts.append("\n" + info.extra.decode("utf-8", "replace"))
     local = _local_header_text(data, info, at)
@@ -897,7 +1149,7 @@ def _member_body_at(data: bytes, at: int) -> int:
     return at + 30 + int.from_bytes(head[26:28], "little") + int.from_bytes(head[28:30], "little")
 
 
-def _account_member_span(data: bytes, info: zipfile.ZipInfo, spans: list[tuple[int, int]], at: int) -> None:
+def _account_member_span(data: bytes, info: zipfile.ZipInfo, cov: Coverage, at: int) -> None:
     """Record the bytes of one member: its local header, its name, its extra field, its payload.
 
     One function for both branches — a member with a body and a directory entry without one —
@@ -917,32 +1169,30 @@ def _account_member_span(data: bytes, info: zipfile.ZipInfo, spans: list[tuple[i
     name_len = int.from_bytes(head[26:28], "little") if len(head) == 30 else 0
     name_at = min(body, at + 30)
     extra_at = min(body, max(name_at, at + 30 + name_len))
-    # Two spans, not one: the header (fixed fields, name and extra field, read by the
-    # structural reader) and the payload (read by the member's own decode). The boundary
-    # between them is where a term can be split and seen by neither reader, and the sweep can
-    # only find it if that boundary is an edge — with the member recorded as one range, a term
-    # split across the name and the body was contiguous in the file's bytes and reported
-    # nowhere. Recorded from the offset the header was *found* at, not the one the directory
-    # claims, or a wrong claim hides the real header.
-    # Four parts, so each boundary inside the header is an edge: the fixed fields (read by the
-    # local-header reader), the name and the extra field (read as the member's own, or read as
-    # a copy of the directory's — either way accounted for), and the payload. One range over the
-    # header hid the name/extra boundary the same way one range over the record hid the
-    # name/comment boundary.
-    spans.extend(
-        (start, stop)
-        for start, stop in ((at, name_at), (name_at, extra_at), (extra_at, body), (body, body + info.compress_size))
-        if stop > start
-    )
+    # Four ranges, not one, so each boundary inside the member is an edge the sweep can cross:
+    # the fixed fields (read by the local-header reader), the name and the extra field (read as
+    # the member's own, or read as a copy of the directory's — either way accounted for), and
+    # the payload (read by the member's own decode, or by the space its decompression
+    # produces). Recorded from the offset the header was *found* at, not the one the directory
+    # claims, or a wrong claim hides the real header. One range over the header hid the
+    # name/extra boundary the same way one range over the record hid the name/comment boundary.
+    for start, stop, reader in (
+        (at, name_at, "member-header"),
+        (name_at, extra_at, "member-name"),
+        (extra_at, body, "member-extra"),
+        (body, body + info.compress_size, "member-payload"),
+    ):
+        cov.consumed(start, stop, reader)
+    cov.declare(body, body + info.compress_size, "member-payload")
 
 
 def _zip_member_text(
     zf: zipfile.ZipFile,
     depth: int,
     data: bytes,
+    cov: Coverage,
     runs: bool = True,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
-) -> tuple[str, str | None, list[tuple[int, int]]]:
+) -> tuple[str, str | None]:
     """Text of a container's members, read member by member.
 
     Two rules decide what happens here, and the member's *name* is not one of them in
@@ -951,14 +1201,14 @@ def _zip_member_text(
     `word/media/<path>/image.png` as in the bytes behind that name, and a member the
     readers find nothing in would otherwise contribute nothing at all.
 
-    Returns the text, the reasons, and the byte spans this pass accounted for — member
-    regions, the directory and the end record. The caller scans the complement of all of
-    them once over the whole file.
+    Every byte range this pass reads — member regions, the directory, the end record — is
+    registered onto `cov` as it is read, rather than returned for the caller to scan the
+    complement of: the caller's own complement scan calls `cov.uncovered()`, which sees these
+    registrations directly.
     """
     chunks: list[str] = []
     reasons: list[str] = []
     skipped: list[str] = []
-    payload: list[tuple[int, int]] = []
     over_limit = False
     # The archive comment is text in the container, and it is read before any member:
     # nothing else in this module looks at it, and a container with ordinary member
@@ -966,7 +1216,7 @@ def _zip_member_text(
     if zf.comment:
         chunks.append(f"\nZIPCOMMENT:{zf.comment.decode('utf-8', 'replace')}")
         # See the member-comment reader: UTF-16 in a comment is text this file is meant to catch.
-        chunks.append("\n" + _utf16_views(zf.comment))
+        chunks.append("\n" + _utf16_views(zf.comment, cov))
     # `islice` bounds the work done here, not the memory `zipfile` already spent: opening
     # the container parses its central directory. `_inflate_zip` refuses to open one whose
     # end-of-central-directory record declares more members than ZIP_OPEN_MEMBER_CAP, and
@@ -991,14 +1241,32 @@ def _zip_member_text(
         # a directory entry, an unreadable member and a member too big to read carry a name,
         # a comment and an extra field just as a readable one does, and reading them only in
         # the branch that reads content left two of those channels read by nothing.
-        structural = _member_structural_text(data, info, header_at)
+        # Declare the payload extent
+        body_at = _member_body_at(data, header_at)
+        if body_at > header_at and not (info.is_dir() and info.compress_size == 0):
+            # No `cov.declare(..., "member-payload")` here: `_account_member_span` below
+            # declares that exact span, for this branch and every other one a member can
+            # take, so a second declare on the identical bytes only doubled the audit's own
+            # finding when the payload went undecoded — one report per declare call, for
+            # bytes that are one problem, not two.
+            local_head = data[header_at:header_at + 30]
+            if len(local_head) >= 30:
+                local_csize = int.from_bytes(local_head[18:22], "little")
+                # The sentinel is not a disagreeing size — it is "the real size is in the zip64
+                # extra field, not here" — and `info.compress_size` already carries that real,
+                # resolved size from the central directory. Believing the sentinel as a claim
+                # declared a payload extent running to end-of-file, off the back of a header
+                # that was never claiming any size at all.
+                if local_csize != info.compress_size and local_csize != ZIP64_SENTINEL_32:
+                    cov.declare(body_at, body_at + local_csize, "member-payload-local")
+        structural = _member_structural_text(data, info, header_at, cov)
         if info.is_dir() and info.compress_size == 0:
             # A directory entry with no payload: its name, comment, extra field and
             # local header are text in the container like any other member's:
             # `word/media/<private path>/` is a place a private path can be written, and
             # skipping the entry outright made it invisible.
             chunks.append(structural)
-            _account_member_span(data, info, payload, header_at)
+            _account_member_span(data, info, cov, header_at)
             continue
         # A directory entry *with* a payload is read like any other member: the entry's span
         # covers the payload, so taking this branch on `is_dir()` alone put those bytes inside
@@ -1013,7 +1281,7 @@ def _zip_member_text(
             # its payload is reported as unsearched rather than cleared, which is what the
             # claim asks for. Leaving the span unaccounted made the complement read the
             # header again and report the same name twice.
-            _account_member_span(data, info, payload, header_at)
+            _account_member_span(data, info, cov, header_at)
             continue
         try:
             # Read at most the declared size: zipfile caps read() at the header's
@@ -1029,7 +1297,7 @@ def _zip_member_text(
             skipped.append(f"{info.filename} (unreadable)")
             # Accounting the span is what keeps the name from being reported twice: it was
             # read here, and the complement scan reads whatever no span covers.
-            _account_member_span(data, info, payload, header_at)
+            _account_member_span(data, info, cov, header_at)
             continue
         # The decode is for line-accurate reporting, not for detection: the runs scan
         # inside `_scan_member_blob` sees the same literal paths, but it collapses lines,
@@ -1085,6 +1353,24 @@ def _zip_member_text(
                 f"{info.filename}: its declared sizes do not account for the bytes its stream "
                 "holds, so they were read beyond them"
             )
+            # This recovery reads past the member's own declared compressed size, into bytes
+            # `_account_member_span` below does not cover — reported as unsearched-in-full via
+            # `skipped` regardless, but registered too, so the audit's own accounting agrees
+            # with what the reasons text says happened. Bounded at `body_at + len(beyond)`, not
+            # `stop`: `beyond` is itself capped by `BINARY_READ_CAP`, and a claim past that cap
+            # would cover a tail this reader never took.
+            cov.consumed(body_at, body_at + len(beyond), "member-payload-recovery")
+            cov.decoded(body_at, body_at + len(beyond), "member-payload-recovery")
+            if min(stop, len(data)) - body_at > len(beyond):
+                cov.bound(
+                    "member-payload-recovery-cap",
+                    f"{info.filename}: the bytes past its declared size run past the "
+                    f"{BINARY_READ_CAP // 1048576} MB read cap; what came after it was not read",
+                )
+                reasons.append(
+                    f"{info.filename}: the bytes past its declared size run past the "
+                    f"{BINARY_READ_CAP // 1048576} MB read cap; what came after it was not read"
+                )
         leftover = _compressed_leftover(data, info)
         is_container = _looks_like_zip(body_bytes)
         # The decode is what detection of *short* text depends on: the runs scan requires
@@ -1095,24 +1381,22 @@ def _zip_member_text(
         # `runs=False`: this member's bytes were just decoded above, and the printable-run
         # pass over the same bytes would find the same text again, one concatenated line
         # further down, and report every occurrence twice.
-        nested_spans: list[tuple[int, int]] = []
-        extra, extra_reason = _scan_member_blob(
-            body_bytes,
-            depth,
-            runs=is_container,
-            spans_out=payload if info.compress_type == 0 else None,
-            local_spans_out=nested_spans,
-            spaces_out=spaces_out,
-            # The payload's bytes are in the file only when the member stores them raw. An
-            # inflated payload exists nowhere in the file, so an edge inside it would be a
-            # boundary in text no sweep over the file's own bytes could ever visit, and
-            # reporting one would claim coverage for bytes that are not there.
-            origin=_member_body_at(data, header_at) if info.compress_type == 0 else -1,
+        #
+        # The payload's bytes are in the file only when the member stores them raw: then a
+        # view of `cov` translates its registrations back into the file's own coordinates. An
+        # inflated payload exists nowhere in the file, so it gets a space of its own instead —
+        # an edge inside it would be a boundary in text no sweep over the file's own bytes
+        # could ever visit, and reporting one would claim coverage for bytes that are not there.
+        if not is_container:
+            cov.decoded(body_at, body_at + info.compress_size, "member-bytes")
+        body_cov = (
+            cov.view(_member_body_at(data, header_at), len(body_bytes), "member-payload")
+            if info.compress_type == 0
+            else cov.space(body_bytes, "member-payload")
         )
-        # The space this container's boundaries need is registered in `_scan_member_blob`, where
-        # the container is recognised, so that every caller gets it — this one, a local header no
-        # directory record lists, and a decoded PDF or PNG payload. Registering it here as well
-        # would add the same space twice.
+        extra, extra_reason = _scan_member_blob(
+            body_bytes, body_cov, depth, runs=is_container, parent_span=(cov, body_at, body_at + info.compress_size)
+        )
         if extra:
             text += "\n" + extra
         if leftover:
@@ -1130,7 +1414,7 @@ def _zip_member_text(
             skipped.append(f"{info.filename} ({extra_reason})")
         # The bytes of this member, so the complement scan below does not search them a
         # second time.
-        _account_member_span(data, info, payload, header_at)
+        _account_member_span(data, info, cov, header_at)
     # The container's own bytes: everything the readers above have not accounted for. The
     # directory itself is covered — every record's name, comment and extra field was read —
     # and so is the end record and its comment, so both are spans too.
@@ -1145,21 +1429,21 @@ def _zip_member_text(
         fixed = _decode_text(data[at:at + 22])
         if fixed.strip("\x00"):
             chunks.append("\nZIPEOCD:\n" + fixed)
-        payload.append((at, min(len(data), at + 22)))
+        cov.consumed(at, min(len(data), at + 22), "zip-eocd")
         # The zip64 end record and its locator are the same shape of hole and are read and
         # spanned the same way: fixed fields, no other reader, and a three-character marker
         # fits in any of them.
         locator = data.rfind(ZIP64_LOCATOR)
         if locator >= 0:
-            payload.append((locator, min(len(data), locator + 20)))
+            cov.consumed(locator, min(len(data), locator + 20), "zip64-locator")
             chunks.append("\nZIP64LOCATOR:\n" + _decode_text(data[locator:locator + 20]))
             zip64_at = int.from_bytes(data[locator + 8:locator + 16], "little")
             if zip64_at >= 0:
-                payload.append((zip64_at, min(len(data), zip64_at + 56)))
+                cov.consumed(zip64_at, min(len(data), zip64_at + 56), "zip64-eocd")
                 chunks.append("\nZIP64EOCD:\n" + _decode_text(data[zip64_at:zip64_at + 56]))
         comment_len = int.from_bytes(data[at + 20:at + 22], "little")
         if comment_len:
-            payload.append((at + 22, min(len(data), at + 22 + comment_len)))
+            cov.consumed(at + 22, min(len(data), at + 22 + comment_len), "zip-comment")
         if cd_at + cd_size <= len(data):
             # From the shared window rather than from the end record's own two 32-bit
             # fields: in a zip64 container those hold sentinels, the span they give is
@@ -1169,11 +1453,9 @@ def _zip_member_text(
             # Each record is read whole — its fixed fields here, its name, extra field and
             # comment with the member they belong to — and each record is spanned whole, so
             # the complement scan can read none of it twice.
-            record_text, record_spans = _directory_record_text(data, cd_at, cd_size)
+            record_text = _directory_record_text(data, cov, cd_at, cd_size)
             if record_text:
                 chunks.append("\nZIPDIRECTORY:\n" + record_text)
-            for span in record_spans:
-                payload.append(span)
     if skipped:
         shown = ", ".join(sorted(skipped)[:4]) + (" …" if len(skipped) > 4 else "")
         reasons.append(f"zip member(s) that could not be read to the end were not searched: {shown}")
@@ -1181,29 +1463,27 @@ def _zip_member_text(
         # The same rule as the stream, byte and nesting bounds: a bound that stops work
         # reports itself, and it reports *itself* rather than joining a compound sentence
         # that leaves a reader guessing which of three causes fired.
+        cov.bound("member-limit", f"more than {ZIP_MEMBER_LIMIT} members in one container; the rest were not searched")
         reasons.append(f"more than {ZIP_MEMBER_LIMIT} members in one container; the rest were not searched")
-    # The spans go back to the caller rather than being scanned here: the caller holds the
-    # whole file, and the complement of *every* archive in it is what has to be read once.
-    # Scanning here would read the same gap twice for a file with two archives in it.
-    return "".join(chunks), "; ".join(reasons) if reasons else None, payload
+    return "".join(chunks), "; ".join(reasons) if reasons else None
 
 
-def _directory_record_text(data: bytes, cd_at: int, cd_size: int) -> tuple[str, list[tuple[int, int]]]:
-    """Each central-directory record's fixed fields as text, and the span of each record.
+def _directory_record_text(data: bytes, cov: Coverage, cd_at: int, cd_size: int) -> str:
+    """Each central-directory record's fixed fields as text, registering the span of each.
 
     A record is 46 fixed bytes, then its name, its extra field and its comment. The three
     written channels are read with the member they belong to (`info.filename`, `info.extra`,
     `info.comment`); the fixed fields — version, flags, method, times, checksum, sizes,
-    attributes and the local-header offset — are read here. Both are spanned, and the span is
-    the whole record, so the complement scan cannot read either a second time.
+    attributes and the local-header offset — are read here. Both are registered, and the
+    registration is the whole record split into its four parts, so the complement scan cannot
+    read any of it a second time.
 
-    Read *and* spanned, rather than spanned alone: a span is a claim that a reader read those
-    bytes, and marking the fixed fields read while reading them nowhere is how a
-    three-character marker in an attributes field came to be cleared with no reason. The same
-    rule as a member's local header, which is spanned and read for the same purpose.
+    Read *and* registered, rather than registered alone: a registration is a claim that a
+    reader read those bytes, and marking the fixed fields read while reading them nowhere is
+    how a three-character marker in an attributes field came to be cleared with no reason. The
+    same rule as a member's local header, which is registered and read for the same purpose.
     """
     texts: list[str] = []
-    spans: list[tuple[int, int]] = []
     at = cd_at
     end = cd_at + cd_size
     for _ in range(ZIP_MEMBER_LIMIT):
@@ -1215,20 +1495,22 @@ def _directory_record_text(data: bytes, cd_at: int, cd_size: int) -> tuple[str, 
         written = at + 46
         written_end = min(end, written + name_len + extra_len + comment_len)
         texts.append(_decode_text(data[at + 4:at + 46]))
-        # Spanned by part, not as one record: the fixed fields are read here, the name, extra
+        # Registered by part, not as one record: the fixed fields are read here, the name, extra
         # field and comment are read with the member they belong to, and a boundary between two
         # readers is where a term held in the clear gets split and seen by neither — the record
         # is contiguous in the file, so a path whose two halves are the name and the comment was
         # found by nothing while every reader reported the record read.
         name_end = min(end, written + name_len)
         extra_end = min(end, name_end + extra_len)
-        spans.extend(
-            (start, stop)
-            for start, stop in ((at, written), (written, name_end), (name_end, extra_end), (extra_end, written_end))
-            if stop > start
-        )
+        for start, stop, reader in (
+            (at, written, "directory-record"),
+            (written, name_end, "directory-record-name"),
+            (name_end, extra_end, "directory-record-extra"),
+            (extra_end, written_end, "directory-record-comment"),
+        ):
+            cov.consumed(start, stop, reader)
         at = written_end
-    return "\n".join(t for t in texts if t), spans
+    return "\n".join(t for t in texts if t)
 
 
 def _eocd_offset(data: bytes) -> int | None:
@@ -1354,7 +1636,7 @@ def _declared_member_count(data: bytes) -> tuple[int | None, str | None]:
     return total, None
 
 
-def _unopenable(data: bytes, reason: str, depth: int = 0) -> tuple[str, str | None]:
+def _unopenable(data: bytes, cov: Coverage, reason: str, depth: int = 0) -> tuple[str, str | None]:
     """A container this check will not open: its own bytes are still bytes.
 
     Refusing to open a container is not a reason to stop reading it. The members stay
@@ -1362,7 +1644,7 @@ def _unopenable(data: bytes, reason: str, depth: int = 0) -> tuple[str, str | No
     binary readers: a private path can sit in front of a header, behind the end record, or
     in a local header no directory record lists, in a container nobody will open.
     """
-    text, scanned_reason = _binary_readers(data, depth=depth)
+    text, scanned_reason = _binary_readers(data, cov, depth=depth)
     return text, "; ".join(r for r in (reason, scanned_reason) if r)
 
 
@@ -1403,12 +1685,9 @@ def _directory_matches(data: bytes, declared: int) -> tuple[bool, str | None]:
 
 def _inflate_zip(
     data: bytes,
+    cov: Coverage,
     depth: int = 0,
     runs: bool = True,
-    spans_out: list[tuple[int, int]] | None = None,
-    origin: int = 0,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
-    local_spans_out: list[tuple[int, int]] | None = None,
 ) -> tuple[str, str | None]:
     """Text of every zip container in these bytes, and of the bytes around them.
 
@@ -1424,6 +1703,10 @@ def _inflate_zip(
 
     `runs=False` for a container that is itself a member whose bytes a caller has already
     decoded as text: the printable-run pass over the same bytes would find that text again.
+
+    Each slice reads through a view of `cov` scoped to that slice, so its registrations land
+    in `cov`'s own coordinates without this function or its caller needing to translate them
+    by hand — the one thing `local_spans_out` and the `origin` sign used to exist for.
     """
     problem = _structural_problem(data)
     if problem is None:
@@ -1431,13 +1714,11 @@ def _inflate_zip(
         # archive, opened once, with one complement scan at the end.
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                text, reason, spans = _zip_member_text(zf, depth, data, runs=runs, spaces_out=spaces_out)
+                text, reason = _zip_member_text(zf, depth, data, cov, runs=runs)
         except Exception as exc:
             problem = f"looks like a zip container but would not open ({exc.__class__.__name__})"
         else:
-            return _with_the_complement(
-                data, [(0, text, reason, spans)], runs, depth, spans_out, origin, spaces_out, local_spans_out
-            )
+            return _with_the_complement(data, cov, [(text, reason)], depth)
     signatures = list(islice(re.finditer(re.escape(ZIP_LOCAL_HEADER), data), ARCHIVE_START_LIMIT))
     starts = sorted({0} | {m.start() for m in signatures})
     # Where a slice can end: at the next archive's first local header, or at the end of an
@@ -1447,7 +1728,8 @@ def _inflate_zip(
         {m.start() for m in signatures}
         | {m.start() + ZIP_EOCD_LEN for m in islice(re.finditer(re.escape(ZIP_EOCD), data), ARCHIVE_START_LIMIT)}
     )
-    accepted: list[tuple[int, str, str | None, list[tuple[int, int]]]] = []
+    accepted: list[tuple[str, str | None]] = []
+    refused: list[str] = []
     covered_to = 0
     for index, start in enumerate(starts):
         if start < covered_to:
@@ -1457,54 +1739,60 @@ def _inflate_zip(
         # trying it costs one structural check that fails, which is why a few are tried
         # rather than only the next one.
         ends = [end for end in ends_pool if end > start][:ARCHIVE_END_TRIES] + [len(data)]
+        # `why_not` remembers the last reason this start's candidates were turned down, but
+        # only when the candidate's own record describes this exact range: `start` is tried
+        # for every local-header-shaped byte sequence, most of which are not an archive's
+        # real boundary at all (byte 0 by default, a signature inside a member's bytes, a
+        # decoy ahead of the real header), and `_structural_problem` turns those down too —
+        # by finding the real archive described elsewhere, the same way `_describes_itself`
+        # does. Reporting *that* as a refusal would fire on every ordinary prepended gap.
+        # The `else` on this `for` only runs when every candidate was turned down, which is
+        # what tells a start that never opened apart from one whose failing candidates were
+        # followed by a later success — the second must not be reported, since it is not a
+        # refusal.
+        why_not = None
         for end in ends:
-            if _structural_problem(data[start:end]) is not None:
+            structural = _structural_problem(data[start:end])
+            if structural is not None:
+                if _describes_itself(data[start:end]) is None:
+                    why_not = structural
                 continue
             try:
                 with zipfile.ZipFile(io.BytesIO(data[start:end])) as zf:
-                    text, reason, member_spans = _zip_member_text(zf, depth, data[start:end], runs=runs, spaces_out=spaces_out)
-            except Exception:
+                    text, reason = _zip_member_text(
+                        zf, depth, data[start:end], cov.view(start, end - start, "archive-slice"), runs=runs
+                    )
+            except Exception as exc:
+                why_not = exc.__class__.__name__
                 continue
-            accepted.append((start, text, reason, [(start + s, start + e) for s, e in member_spans]))
+            accepted.append((text, reason))
             covered_to = end
             break
+        else:
+            if why_not is not None:
+                refused.append(f"an archive at byte {start} would not open ({why_not}) and its members were read as bytes")
     if not accepted:
-        return _unopenable(data, f"{problem}, so its members cannot be listed and the container was not opened", depth)
-    return _with_the_complement(data, accepted, runs, depth, spans_out, origin, spaces_out, local_spans_out)
+        return _unopenable(data, cov, f"{problem}, so its members cannot be listed and the container was not opened", depth)
+    return _with_the_complement(data, cov, accepted + [(None, reason) for reason in refused], depth)
 
 
 def _with_the_complement(
     data: bytes,
-    accepted: list[tuple[int, str, str | None, list[tuple[int, int]]]],
-    runs: bool,
+    cov: Coverage,
+    accepted: list[tuple[str, str | None]],
     depth: int = 0,
-    spans_out: list[tuple[int, int]] | None = None,
-    origin: int = 0,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
-    local_spans_out: list[tuple[int, int]] | None = None,
 ) -> tuple[str, str | None]:
     """The accepted archives' text, plus one scan of every byte they did not account for.
 
     One scan for the whole file, not one per archive: two archives concatenated into one
     file share a complement, and scanning per archive would read the bytes between them
-    twice and report the same occurrence at two line numbers.
+    twice and report the same occurrence at two line numbers. `_scan_outside` finds that
+    complement itself, from `cov.uncovered()`, now that every accepted archive has already
+    registered its own member spans onto `cov` through the view it read through.
     """
-    texts = [text for _, text, _, _ in accepted]
-    reasons = [reason for _, _, reason, _ in accepted if reason]
-    spans = [span for _, _, _, member_spans in accepted for span in member_spans]
-    if local_spans_out is not None:
-        # The same ranges in the coordinates they were found in. `spans_out` filters by origin
-        # because an offset that means nothing in the file must not become an edge there; a
-        # caller with a place for them — the bytes of a compressed member that is itself a
-        # container — needs them unfiltered, or that place has no edges to sweep against.
-        local_spans_out.extend(spans)
-    if spans_out is not None and origin >= 0:
-        # Translated into the file's own coordinates: `data` is a slice or a member's bytes, and
-        # a span means nothing to a sweep over the file unless it says where those bytes are.
-        # `origin` is -1 when the bytes are not in the file at all — an inflated member — which
-        # is why a container inside a deflated member contributes no edges.
-        spans_out.extend((origin + start, origin + end) for start, end in spans)
-    own, own_reason = _scan_outside(data, spans, runs, depth, spans_out, origin, spaces_out)
+    texts = [text for text, _ in accepted]
+    reasons = [reason for _, reason in accepted if reason]
+    own, own_reason = _scan_outside(data, cov, depth)
     if own:
         texts.append(own)
     if own_reason:
@@ -1590,7 +1878,7 @@ def _looks_deflate(blob: bytes) -> bool:
 def _read_a_decoded_payload(
     raw: bytes,
     depth: int,
-    spaces_out: list[tuple[bytes, list[int]]] | None,
+    cov: Coverage,
 ) -> tuple[str, str | None]:
     """Bytes a reader *produced* — not bytes in the file — read with the readers a member gets.
 
@@ -1599,20 +1887,22 @@ def _read_a_decoded_payload(
     streams are invisible to a printable-run pass, so a private path in one was cleared with
     no reason. The bytes exist nowhere in the file, so their boundaries cannot be edges in
     the file's coordinates: they are read as a space of their own, the same rule a compressed
-    member that is itself a container gets.
+    member that is itself a container gets. `cov` is that space, already scoped to `raw` by
+    whichever caller decompressed it.
     """
     if depth >= ZIP_NESTING_LIMIT:
-        text, _ = printable_runs(raw), None
-        return text, "a decoded payload was not searched as a container: past the nesting limit"
+        cov.consumed(0, len(raw), "printable-run")
+        cov.bound("nesting-limit", "a decoded payload was not searched as a container: past the nesting limit")
+        return printable_runs(raw), "a decoded payload was not searched as a container: past the nesting limit"
     if _looks_like_zip(raw):
-        return _scan_member_blob(raw, depth + 1, runs=True, spaces_out=spaces_out)
-    return _binary_readers(raw, runs=True, depth=depth + 1, origin=-1, spaces_out=spaces_out)
+        return _scan_member_blob(raw, cov, depth + 1, runs=True)
+    return _binary_readers(raw, cov, runs=True, depth=depth + 1)
 
 
 def _inflate_zlib_payloads(
     data: bytes,
+    cov: Coverage,
     depth: int = 0,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
 ) -> tuple[str, str | None]:
     """Text inside zlib-compressed payloads a text scan cannot see.
 
@@ -1667,7 +1957,11 @@ def _inflate_zlib_payloads(
         # one cut short with budget to spare, which is its own cause.
         if partial and budget > 0:
             partial_payload = True
-        chunk, chunk_reason = _read_a_decoded_payload(raw, depth, spaces_out)
+        cov.decoded(m.start(1), m.end(1), "pdf-inflate")
+        # These bytes exist nowhere in the file — they are what the stream decompressed to —
+        # so they get a space of their own, registered here where they are recognised.
+        payload_cov = cov.space(raw, "pdf-stream")
+        chunk, chunk_reason = _read_a_decoded_payload(raw, depth, payload_cov)
         if chunk:
             chunks.append(chunk)
         if chunk_reason:
@@ -1677,7 +1971,7 @@ def _inflate_zlib_payloads(
         # matches behind too, and reporting that as the stream count would name a bound
         # that never fired.
         stream_limit_hit = True
-    png_chunks, png_reasons, budget = _png_text_chunks(data, budget, depth, spaces_out)
+    png_chunks, png_reasons, budget = _png_text_chunks(data, budget, cov, depth)
     chunks.extend(png_chunks)
     reasons.extend(png_reasons)
     if budget <= 0:
@@ -1697,8 +1991,8 @@ def _inflate_zlib_payloads(
 def _png_text_chunks(
     data: bytes,
     budget: int,
+    cov: Coverage,
     depth: int = 0,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
 ) -> tuple[list[str], list[str], int]:
     """tEXt (raw), zTXt and iTXt (zlib) chunks of a PNG, split by keyword.
 
@@ -1720,6 +2014,8 @@ def _png_text_chunks(
         length = int.from_bytes(data[offset:offset + 4], "big")
         kind = data[offset + 4:offset + 8]
         body = data[offset + 8:offset + 8 + length]
+        if kind in (b"tEXt", b"zTXt", b"iTXt"):
+            cov.declare(offset + 8, offset + 8 + length, kind.decode("ascii") + "-body")
         offset += 12 + length
         # Every clear-text field of a chunk gets the same short-run read as its text: a keyword is
         # text, and so are an iTXt's language tag and translated keyword. The runs pass carries
@@ -1735,6 +2031,7 @@ def _png_text_chunks(
         if short_fields:
             out.append("\n".join(short_fields))
         if kind == b"tEXt":
+            cov.decoded(offset - 4 - length, offset - 4, "png-text")
             # The text, not only the keyword. The runs pass carries an uncompressed chunk's
             # long text already, but its minimum run is six characters while condition 5's
             # shortest marker is three: a run that short, after a keyword NUL, was read by
@@ -1759,8 +2056,10 @@ def _png_text_chunks(
                 continue
             budget -= len(raw)
             partial = partial or (cut and budget > 0)
-            chunk, chunk_reason = _read_a_decoded_payload(raw, depth, spaces_out)
+            payload_cov = cov.space(raw, "png-ztxt")
+            chunk, chunk_reason = _read_a_decoded_payload(raw, depth, payload_cov)
             out.append(chunk or _decode_text(raw))
+            cov.decoded(offset - 4 - length, offset - 4, "png-inflate")
             if chunk_reason:
                 reasons.append(chunk_reason)
         elif kind == b"iTXt":
@@ -1778,8 +2077,10 @@ def _png_text_chunks(
                     continue
                 budget -= len(raw)
                 partial = partial or (cut and budget > 0)
-                chunk, chunk_reason = _read_a_decoded_payload(raw, depth, spaces_out)
+                payload_cov = cov.space(raw, "png-itxt")
+                chunk, chunk_reason = _read_a_decoded_payload(raw, depth, payload_cov)
                 out.append(chunk or _decode_text(raw))
+                cov.decoded(offset - 4 - length, offset - 4, "png-inflate")
                 if chunk_reason:
                     reasons.append(chunk_reason)
             else:
@@ -1789,6 +2090,7 @@ def _png_text_chunks(
                 # the text of a chunk that reported itself fully read was read by nothing. The
                 # text is the last field: keyword NUL, compression flag, compression method,
                 # language tag NUL, translated keyword NUL, then the text itself.
+                cov.decoded(offset - 4 - length, offset - 4, "png-text")
                 after_flag = rest[2:] if len(rest) >= 2 else b""
                 first_nul = after_flag.find(b"\x00")
                 after_lang = after_flag[first_nul + 1:] if first_nul >= 0 else after_flag
@@ -1832,42 +2134,40 @@ def _decode_text(raw: bytes) -> str:
     return raw.decode("utf-8", "replace")
 
 
-def read_textish(
-    path: Path,
-    spans_out: list[tuple[int, int]] | None = None,
-    spaces_out: list[tuple[bytes, list[int]]] | None = None,
-) -> tuple[str, bool, str | None]:
-    """Return (searchable text, is_binaryish, unscanned_reason).
+def read_textish(path: Path) -> tuple[str, bool, str | None, Coverage]:
+    """Return (searchable text, is_binaryish, unscanned_reason, coverage).
 
     A file the check cannot read in full comes back with a reason, and the caller
     reports it as a failure: an unread file that quietly passes is the one
     outcome worse than a false positive.
 
-    `spans_out`, when given, collects the byte ranges the container reader accounted for. They
-    are what tells a later sweep where the boundaries between the regions a reader saw are —
-    the points a term in the clear can straddle and be seen by nothing.
-
-    `spaces_out`, when given, collects the places that are *not* the file's own bytes: a member
-    that is itself a container and was stored compressed has no offsets in the file at all, so
-    its internal boundaries cannot be edges in the file's sweep, and its members' names and
-    payloads are read in different calls. Each entry is (those bytes, the edges of the ranges
-    read inside them), and each is swept like the file's own bytes are.
+    `coverage` is the single object that replaced the old `spans_out`/`spaces_out` pair: it
+    is always returned, never optional, so a caller cannot ask for text without also getting
+    the record of what was read to produce it. Its edges are what tells a later sweep where
+    the boundaries between the regions a reader saw are — the points a term in the clear can
+    straddle and be seen by nothing — and its spaces are the places that are *not* the file's
+    own bytes: a member that is itself a container and was stored compressed has no offsets
+    in the file at all, so its internal boundaries cannot be edges in the file's sweep, and
+    its members' names and payloads are read in different calls. Its `uncovered()` is the
+    audit: every byte of the file, and of every space recognised inside it, that no
+    registered reader consumed.
     """
     try:
         size = path.stat().st_size
         if size == 0:
-            return "", False, None
+            return "", False, None, Coverage(0, str(path))
         if size > BINARY_READ_CAP:
-            return "", True, f"{size / 1048576:.1f} MB exceeds the {BINARY_READ_CAP // 1048576} MB scan cap"
+            return "", True, f"{size / 1048576:.1f} MB exceeds the {BINARY_READ_CAP // 1048576} MB scan cap", Coverage(0, str(path))
         data = path.read_bytes()
     except OSError as exc:
         # A file that cannot be read cannot be cleared — a broken symlink or a
         # permission problem must not become a silent pass for conditions 3, 4 and 5.
-        return "", False, f"could not be read ({exc.__class__.__name__}: {exc.strerror or exc})"
+        return "", False, f"could not be read ({exc.__class__.__name__}: {exc.strerror or exc})", Coverage(0, str(path))
+    cov = Coverage(len(data), str(path))
     if _looks_like_zip(data):
-        text, reason = _inflate_zip(data, spans_out=spans_out, spaces_out=spaces_out)
+        text, reason = _inflate_zip(data, cov)
         if text or reason:
-            return text, True, reason
+            return text, True, reason, cov
     if looks_text(data):
         if len(data) > TEXT_READ_CAP:
             head = data[:TEXT_READ_CAP].decode("utf-8", "replace")
@@ -1875,49 +2175,44 @@ def read_textish(
             return head + "\n" + tail, False, (
                 f"text file is {len(data) / 1048576:.1f} MB, past the {TEXT_READ_CAP // 1048576} MB read cap — "
                 "only its head and tail were searched"
-            )
-        if spans_out is not None:
-            # This file's own bytes are one region and the decode above read all of them, so it
-            # declares that: every occurrence of a term *in those bytes* is inside a range a
-            # reader read. That is not the same as having read the file. A PDF is mostly
-            # printable text and carries its content streams deflated; a PNG's text chunks are
-            # compressed the same way. Reading only the decoded bytes cleared a private path
-            # that was recoverable by inflating the stream it sat in, and report it as read in
-            # full. The compressed payloads are read here with the readers a member gets, and
-            # because those bytes exist nowhere in the file their boundaries become a space of
-            # their own rather than edges in the file's coordinates.
-            spans_out.append((0, len(data)))
-        inflated, inflate_reason = _inflate_zlib_payloads(data, depth=0, spaces_out=spaces_out)
+            ), cov
+        # This file's own bytes are one region and the decode below reads all of them, so it
+        # is registered whole: every occurrence of a term *in those bytes* is inside a range a
+        # reader read. That is not the same as having read the file. A PDF is mostly
+        # printable text and carries its content streams deflated; a PNG's text chunks are
+        # compressed the same way. Reading only the decoded bytes cleared a private path
+        # that was recoverable by inflating the stream it sat in, and report it as read in
+        # full. The compressed payloads are read here with the readers a member gets, and
+        # because those bytes exist nowhere in the file their boundaries become a space of
+        # their own rather than edges in the file's coordinates.
+        cov.consumed(0, len(data), "utf8-decode")
+        for m in islice(PDF_STREAM.finditer(data), INFLATE_STREAM_LIMIT):
+            if _looks_deflate(m.group(1)):
+                cov.declare(m.start(1), m.end(1), "pdf-stream")
+        inflated, inflate_reason = _inflate_zlib_payloads(data, cov, depth=0)
         text = data.decode("utf-8", "replace")
         if inflated:
             text += "\n" + inflated
         # The same bytes read as UTF-16, and for the same reason the binary path reads them that
-        # way. A text file's whole content is one span here, so the sweep has no interior edge to
-        # cross and *no* reader below this line looks at those bytes again: a private path written
-        # in UTF-16 past the point where `looks_text` stops looking — it reads the first eight
-        # kilobytes for a null byte, and a UTF-16 tail is invisible to that — was cleared on a
-        # release tree with the whole file reported as read in full. The ASCII reasoning that made
-        # the whole-file span safe ("a term split across two runs has to straddle a byte that is
-        # not part of it") is about terms in the clear; a UTF-16 encoding of ASCII text is itself
-        # full of the null bytes it assumes away.
-        text += "\n" + _utf16_views(data)
-        return text, False, inflate_reason
-    if spans_out is not None:
-        # Binary bytes are not decoded whole, so no range is claimed for them here: the run
-        # pass inside `_binary_readers` declares the runs it produced, and a term those runs
-        # do not cover — a short one, or one split between two of them — is reported by the
-        # sweep precisely because no declared range contains it.
-        # `spaces_out` travels with `spans_out`: the binary readers inflate the compressed
-        # payloads this file carries — a PDF content stream, a PNG text chunk — and those bytes
-        # exist nowhere in the file, so the boundaries inside them have to be registered where
-        # they are. Passing the span list alone left every compressed payload at the file level
-        # unread: a private path parked in a PDF stream was cleared with no finding and no
-        # reason, while the same bytes inside a member of a container were caught, because the
-        # member path passes both lists.
-        scanned, reason = _binary_readers(data, spans_out=spans_out, origin=0, spaces_out=spaces_out)
-        return scanned, True, reason
-    scanned, reason = _binary_readers(data, spaces_out=spaces_out)
-    return scanned, True, reason
+        # way. A text file's whole content is one region here, so the sweep has no interior edge
+        # to cross from this registration alone, and a private path written in UTF-16 past the
+        # point where `looks_text` stops looking — it reads the first eight kilobytes for a null
+        # byte, and a UTF-16 tail is invisible to that — was cleared on a release tree with the
+        # whole file reported as read in full. The ASCII reasoning that made the whole-file
+        # region safe ("a term split across two runs has to straddle a byte that is not part of
+        # it") is about terms in the clear; a UTF-16 encoding of ASCII text is itself full of the
+        # null bytes it assumes away.
+        text += "\n" + _utf16_views(data, cov)
+        return text, False, inflate_reason, cov
+    # Binary bytes are not decoded whole, so no range is claimed for them by this branch: the
+    # run pass inside `_binary_readers` declares what it examined, and a term those runs do not
+    # cover as text — a short one, or one split between two of them — is reported by the sweep
+    # precisely because no declared range contains it as text, even though the bytes are
+    # accounted for. The binary readers inflate the compressed payloads this file carries too —
+    # a PDF content stream, a PNG text chunk — and those bytes exist nowhere in the file, so the
+    # boundaries inside them are registered as spaces of their own, on the same `cov`.
+    scanned, reason = _binary_readers(data, cov)
+    return scanned, True, reason, cov
 
 
 def line_of(text: str, index: int) -> int:
@@ -2288,6 +2583,65 @@ def check_tag(tag: str, terms: list[str]) -> list[Finding]:
     return findings
 
 
+# The coverage audit's own exception list: bytes a format leaves out of every structure by
+# construction, never a reader that merely forgot. Printed on every run, whether or not it is
+# empty, because an exception nobody sees is indistinguishable from a hole. It is empty today:
+# every reader either registers what it read directly, or falls back to `_binary_readers`,
+# which claims the whole of whatever it is given before it looks for anything finer, and
+# `_scan_outside` closes any container gap that is left over by decoding it and registering
+# that decode. Between the two, nothing a container or a space can hold is left unclaimed by
+# construction — so an entry would only belong here for a genuinely inspectable-by-nothing
+# byte range, which no format this check reads has turned out to have.
+COVERAGE_EXCEPTIONS: dict[str, str] = {}
+
+
+def check_coverage_audit(files: list[str], coverage_of: dict[str, Coverage], unscanned: dict[str, str]) -> list[Finding]:
+    """AUDIT. Every byte of a scanned container, and of every space recognised inside it,
+    that no registered reader consumed.
+
+    Not one of the six conditions the classification document states — this is the mechanism
+    that makes the reader-registration defect class that document records ("found at a new call
+    site in essentially every review round since round 7") structurally impossible to
+    reintroduce. `Coverage` is a required argument on every reader, with no default and no
+    `is not None` guard, so a reader cannot run without a place to register what it read, and a
+    call site cannot forward a coverage object without it being forwarded to what it calls in
+    turn. A hole here means a reader ran and did not register, or a bound stopped a reader and
+    the bytes past it were left as if read.
+
+    A file `read_textish` already reported unscanned is skipped: it is already failing for that
+    reason (conditions 3, 4 and 5 all refuse to clear it), and auditing a deliberately partial
+    read would repeat the same finding under a second name rather than report anything new.
+    """
+    findings: list[Finding] = []
+    for rel in files:
+        if rel in unscanned:
+            continue
+        cov = coverage_of.get(rel)
+        if cov is None:
+            continue
+        for frame in cov.all_frames():
+            readers = ", ".join(frame.readers()) or "none"
+            for start, end in frame.uncovered():
+                findings.append(
+                    Finding(
+                        "AUDIT",
+                        f"{rel} ({frame.label})" if frame.label and frame.label != rel else rel,
+                        f"byte range {start}..{end} ({end - start} byte(s)) accounted for by no reader; "
+                        f"readers that ran in this frame: {readers}",
+                    )
+                )
+            for start, end, what in frame.undecoded_declarations():
+                findings.append(
+                    Finding(
+                        "AUDIT",
+                        f"{rel} ({frame.label})" if frame.label and frame.label != rel else rel,
+                        f"declared payload region {what} at {start}..{end} ({end - start} byte(s)) was never decoded; "
+                        f"readers that ran in this frame: {readers}",
+                    )
+                )
+    return findings
+
+
 def check_6_manifest(tree: Path, files: list[str], manifest_path: Path, assets_dir: str) -> tuple[list[Finding], str | None]:
     """6. An asset in the release tree is not in the approved asset manifest."""
     if not manifest_path.is_file():
@@ -2344,20 +2698,20 @@ def run(tree: Path, doc_path: Path, manifest: Path, assets_dir: str, quiet: bool
     bytes_of: dict[str, bytes] = {}
     edges_of: dict[str, list[int]] = {}
     spaces_of: dict[str, list[tuple[bytes, list[int]]]] = {}
+    coverage_of: dict[str, Coverage] = {}
     binaryish: list[str] = []
     unscanned: dict[str, str] = {}
     for rel in files:
-        spans: list[tuple[int, int]] = []
-        spaces: list[tuple[bytes, list[int]]] = []
-        text, is_bin, reason = read_textish(tree / rel, spans, spaces)
+        text, is_bin, reason, cov = read_textish(tree / rel)
         text_of[rel] = text
+        coverage_of[rel] = cov
         # The points a term can straddle: every edge of every byte range a container reader
-        # accounted for. A file with none is read whole by one reader, so the sweep has nothing
-        # to add there.
-        edges_of[rel] = sorted({edge for start, end in spans for edge in (start, end)})
+        # accounted for, derived from `cov` rather than hand-built. A file with none is read
+        # whole by one reader, so the sweep has nothing to add there.
+        edges_of[rel] = cov.edges()
         # The same for the bytes that are not the file's: a compressed member that is itself a
         # container has boundaries of its own and no offsets in the file.
-        spaces_of[rel] = spaces
+        spaces_of[rel] = cov.space_edges()
         # Capped like every other read here: the sweep below is over what a reader could have
         # been given, and a file past the scan cap is already reported as unscanned rather than
         # half-read, so no bytes are collected for it.
@@ -2379,6 +2733,7 @@ def run(tree: Path, doc_path: Path, manifest: Path, assets_dir: str, quiet: bool
         ("3", "no shipped file names a private path", check_3_no_private_paths(files, terms, text_of, unscanned, bytes_of, edges_of, spaces_of)),
         ("4", "no unresolvable agent instruction", check_4_no_instructions(files, text_of)),
         ("5", "no learning marker in shipped text", check_5_no_markers(files, text_of, bytes_of, edges_of, spaces_of)),
+        ("AUDIT", "no byte of a scanned container goes unaccounted for", check_coverage_audit(files, coverage_of, unscanned)),
     ]
     tag_findings = check_tag(tag, terms) if tag else []
     for cond, _, fs in results:
@@ -2396,6 +2751,11 @@ def run(tree: Path, doc_path: Path, manifest: Path, assets_dir: str, quiet: bool
     print(f"boundary-check: {tree}")
     print(f"  derived {c.derived_from()} and {len(terms)} reference-forbidden terms, in {doc_path}")
     print(f"  release tree: {len(files)} files, {len(binaryish)} scan-through (zip members or printable runs)")
+    if COVERAGE_EXCEPTIONS:
+        shown = "; ".join(f"{name} — {why}" for name, why in COVERAGE_EXCEPTIONS.items())
+        print(f"  coverage audit: {len(COVERAGE_EXCEPTIONS)} exception(s): {shown}")
+    else:
+        print("  coverage audit: 0 exceptions — every byte of a scanned container must be claimed by a reader")
     if tag:
         print(f"  release tag: {tag!r} scanned with {len(terms)} reference-forbidden terms and {len(MARKERS)} markers")
     for cond, label, fs in results:
@@ -2474,7 +2834,7 @@ def main(argv: list[str] | None = None) -> int:
     if violations:
         print(f"BOUNDARY CHECK: FAIL — {len(violations)} violation(s); do not push this tree")
         return 1
-    print("BOUNDARY CHECK: PASS — all six conditions clean")
+    print("BOUNDARY CHECK: PASS — all six conditions clean, coverage audit clean")
     return 0
 
 
