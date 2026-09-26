@@ -1,7 +1,7 @@
 {
   "collected": 557,
   "measured": "2026-09-25",
-  "tree": "a freshly built release tree (99 files), not the private working tree",
+  "tree": "a freshly built release tree (101 files), not the private working tree",
   "command": "python -m pytest -q -p no:cacheprovider, run from the built tree",
   "observed": "38 failed, 515 passed, 4 errors",
   "expected_failures_by_file": {

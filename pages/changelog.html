@@ -123,7 +123,12 @@
 
 <section class="page-content">
   <div class="container">
-    <h3>v0.5.15 <small>2026-09-26</small></h3>
+    <h3>v0.5.16 <small>2026-09-26</small></h3>
+<h4>Changed</h4>
+<ul>
+<li>The release boundary check now accounts for every byte of every file it reads. Instead of trusting each reader to declare the ranges it handles, the check records what each reader actually consumed and fails the release when a byte inside a container was read by no reader — so a reader that skips a range, or a call site that stops passing a declaration another call site passes, is a failed check rather than a hole in one. A declaration is satisfied only by a decoded range and never by a claim; where a reader stops at a read cap, its claim is trimmed to the bytes it actually read and the trim is reported; and an archive the check refuses to open beside one it accepts reports the refusal rather than dropping it. Verified against a tree built the way this repository builds one: the file count, the scan-through reads, the six conditions and the cleared-line count are unchanged, the coverage audit is clean, and the run exits 0.</li>
+</ul>
+<h3>v0.5.15 <small>2026-09-26</small></h3>
 <h4>Added</h4>
 <ul>
 <li>A CI check on the size of the published test suite: <code>tests/public-suite.json</code> publishes the figure this tree is expected to collect — **557 tests**, measured on a release tree built the way this repository's pipeline builds one — together with what that run reported (38 failed, 515 passed, 4 errors, broken down by file) and why the subset behaves that way. <code>.github/workflows/public-suite.yml</code> runs on pull requests, installs <code>.[dev,report]</code>, and fails when the collected count differs from the published figure. It deliberately does not run on pushes to <code>main</code>, which <code>pr-gate.yml</code> guards.</li>
@@ -369,7 +374,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.15 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.16 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>
