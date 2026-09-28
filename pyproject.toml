@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "portshim"
 version = "1.0.0"
@@ -21,6 +25,14 @@ core = [
     "requests>=2.31",
     "fpdf2>=2.7",
 ]
+
+[tool.setuptools]
+# Nothing at the repo root is importable — `portshim` is a script invoked directly, not a
+# module — and several top-level directories each look like a separate package to
+# setuptools, so its automatic discovery refuses the flat layout. Declaring that nothing is
+# packaged is the truthful statement: this project ships scripts and a CLI, not a distribution.
+packages = []
+py-modules = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

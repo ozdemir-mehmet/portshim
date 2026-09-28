@@ -2,6 +2,14 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.18] — 2026-09-28
+
+### Fixed
+- The CI check on the published suite's size now runs. It could not measure the figure it asserted: the project declared no build system and no package set, so `pip install` failed in the backend's discovery before a single test was collected, and the strip step the count depends on lived inside the release pipeline's own script, which the job never invoked. The job installs `.[core,dev,report]`, builds a release tree the way this repository's pipeline builds one when the site fixtures are present, measures in place when they are not, and names each failure rather than stopping on an unbound variable.
+
+### Changed
+- The release pipeline's strip loop is a script of its own, used by the pipeline and by the count job, so what a release tree contains has one implementation instead of two that can drift apart. Its guards fail closed: it refuses to strip a source checkout in place, refuses an absolute pattern or one carrying a `..`, refuses any match resolving outside the tree — validating every match before removing any, so a refusal leaves the tree untouched — and refuses a pattern that would withhold the whole tree at exit 0, judged against the entries that pattern can actually match. A slash-spelled entry names a directory and no longer removes a regular file of that name or a symlink pointing at one; a pattern whose every component is a wildcard is refused rather than silently stripping a level; and a pattern that operates inside directories is no longer judged against the top-level entry count, which refused a deep glob that touched no top-level entry at all.
+
 ## [v0.5.17] — 2026-09-27
 
 ### Fixed

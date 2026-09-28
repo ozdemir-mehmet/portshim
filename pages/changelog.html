@@ -123,7 +123,16 @@
 
 <section class="page-content">
   <div class="container">
-    <h3>v0.5.17 <small>2026-09-27</small></h3>
+    <h3>v0.5.18 <small>2026-09-28</small></h3>
+<h4>Fixed</h4>
+<ul>
+<li>The CI check on the published suite's size now runs. It could not measure the figure it asserted: the project declared no build system and no package set, so <code>pip install</code> failed in the backend's discovery before a single test was collected, and the strip step the count depends on lived inside the release pipeline's own script, which the job never invoked. The job installs <code>.[core,dev,report]</code>, builds a release tree the way this repository's pipeline builds one when the site fixtures are present, measures in place when they are not, and names each failure rather than stopping on an unbound variable.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li>The release pipeline's strip loop is a script of its own, used by the pipeline and by the count job, so what a release tree contains has one implementation instead of two that can drift apart. Its guards fail closed: it refuses to strip a source checkout in place, refuses an absolute pattern or one carrying a <code>..</code>, refuses any match resolving outside the tree — validating every match before removing any, so a refusal leaves the tree untouched — and refuses a pattern that would withhold the whole tree at exit 0, judged against the entries that pattern can actually match. A slash-spelled entry names a directory and no longer removes a regular file of that name or a symlink pointing at one; a pattern whose every component is a wildcard is refused rather than silently stripping a level; and a pattern that operates inside directories is no longer judged against the top-level entry count, which refused a deep glob that touched no top-level entry at all.</li>
+</ul>
+<h3>v0.5.17 <small>2026-09-27</small></h3>
 <h4>Fixed</h4>
 <ul>
 <li>The theme toggle now honours the choice made on any page, on every page. Two of the site's pages — <code>dependencies.html</code> and <code>wireless.html</code> — kept their own copy of the theme script written against a storage key of their own, so a theme chosen anywhere else was ignored on those two and they moved together with each other. All ten pages now load one shared implementation from a single script: the theme is stored under one key, a value left by the old key is migrated once on the first page visited after this release, and a first visit to either of those two pages now follows the operating system preference rather than the markup's default.</li>
@@ -379,7 +388,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.17 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.18 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>

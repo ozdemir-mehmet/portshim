@@ -26,21 +26,153 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install the package with its test and report extras
-        run: python -m pip install -e '.[dev,report]'
+      - name: Install the package with its core, test and report extras
+        # Every extra the suite imports has to be requested here, and the set of extras — not
+        # individual package names or versions — is what stays hand-maintained: the suite imports
+        # `yaml`, which only `core` declares, so a `.[dev,report]` install collects the tree with
+        # two errors instead of running it. Adding a package straight to this line instead of to
+        # the right extra in pyproject.toml would fix today's gap and reopen the same one at the
+        # next import pyproject.toml doesn't yet cover.
+        #
+        # This is also why pyproject.toml declares `[build-system]` and an empty
+        # `[tool.setuptools]` (`packages = []`, `py-modules = []`): without them, `pip install -e`
+        # falls back to setuptools' automatic package discovery, which refuses this flat layout —
+        # several top-level directories each look like their own package to it — and both
+        # `.[dev,report]` and `.[core,dev,report]` fail before any extra is even resolved, with
+        # "Multiple top-level packages discovered in a flat-layout: ['skills', 'templates',
+        # 'references']". Declaring nothing packaged is the truthful statement for a project that
+        # ships a CLI and scripts, not a distribution.
+        run: python -m pip install -e '.[core,dev,report]'
+
+      - name: Build the tree to measure
+        run: |
+          set -euo pipefail
+          # Defaulted rather than read raw, so a runner that hands this step no GITHUB_ENV dies
+          # on a named ::error:: before doing any of the strip/archive work below, rather than on
+          # `set -u`'s own "unbound variable" after that work is already done and unreported.
+          GITHUB_ENV="${GITHUB_ENV:-}"
+          if [ -z "${GITHUB_ENV}" ]; then
+            echo "::error::GITHUB_ENV is not set — this step has nowhere to publish MEASURE_DIR/MEASURE_KIND for the next step to read, so it is refusing to build the release tree at all rather than build it and lose the result."
+            exit 1
+          fi
+          if [ -d tests/fixtures ]; then  # boundary:allow — a development checkout is detected by the presence of the private fixture directory itself
+            # A development checkout: the private fixtures are present, so the working tree
+            # collects a different (larger) count than a release ships. Build a release tree the
+            # way the release script does — export HEAD, strip, then merge the landing page —
+            # and measure that instead. The strip is what removes the private fixture directory
+            # and the private-only test modules, which is the bulk of the difference between
+            # this checkout's count and the published one. The landing merge turns out to matter
+            # too, not for its own tests but for tests/test_sample_assets.py: that module
+            # resolves its fixture directory by walking the tree for the one holding
+            # tools/sample-findings.json (a release tree has it at the tree root; a working tree
+            # has it one directory down, under the landing source directory), and raises at
+            # collection time, rather than skipping, if neither is found — so measuring without
+            # the merge does not just report a different number, it errors during collection.
+            rm -rf /tmp/release-tree
+            mkdir -p /tmp/release-tree
+            git archive HEAD | tar -x -C /tmp/release-tree
+            scripts/release-tree-strip.sh /tmp/release-tree "$(pwd)/.release-filter"  # boundary:allow — this workflow shares the release pipeline's strip implementation and has to invoke it by name; the filter is passed explicitly rather than left to the helper's $0-derived default, which only resolves when the helper is invoked by its own real path
+            git archive HEAD portshim-landing | tar -x -C /tmp/release-tree --strip-components=1  # boundary:allow — the landing merge reads the source directory by name, the same as the release script's own Step 4
+            echo "MEASURE_DIR=/tmp/release-tree" >> "$GITHUB_ENV"
+            echo "MEASURE_KIND=freshly-built-release-tree" >> "$GITHUB_ENV"
+          else
+            # A release checkout: the private fixture directory is absent because this tree has
+            # already been stripped — it is the public repository's own copy of this workflow,
+            # running against the tree it ships. That tree is already what a release measures,
+            # so measure it in place.
+            echo "MEASURE_DIR=." >> "$GITHUB_ENV"
+            echo "MEASURE_KIND=release-checkout-in-place" >> "$GITHUB_ENV"
+          fi
 
       - name: Assert the collected test count
         run: |
           set -euo pipefail
+          # Defaulted rather than read raw, so a retried or standalone run of this step alone
+          # dies on a named ::error:: instead of `set -u`'s own "unbound variable" — the failure
+          # shape the previous round was written to remove.
+          MEASURE_DIR="${MEASURE_DIR:-}"
+          MEASURE_KIND="${MEASURE_KIND:-}"
+          if [ -z "${MEASURE_DIR}" ] || [ -z "${MEASURE_KIND}" ]; then
+            echo "::error::MEASURE_DIR and/or MEASURE_KIND is not set. The 'Build the tree to measure' step did not run (or did not complete) before this one, so there is no tree to assert a count against."
+            exit 1
+          fi
+          if [ ! -e "${MEASURE_DIR}" ]; then
+            echo "::error::MEASURE_DIR (${MEASURE_DIR}) does not exist — the 'Build the tree to measure' step's output is unusable, so there is no tree to collect a count from."
+            exit 1
+          fi
+          if [ ! -d "${MEASURE_DIR}" ]; then
+            echo "::error::MEASURE_DIR (${MEASURE_DIR}) exists but is not a directory — the 'Build the tree to measure' step's output is unusable, so there is no tree to collect a count from."
+            exit 1
+          fi
+          # Every way tests/public-suite.json can fail to hand back a clean integer is named here
+          # rather than left to the exception that would otherwise surface it: a missing file, a
+          # missing field and malformed JSON used to end this step in a bare traceback, and a
+          # quoted number (e.g. "557") used to compare equal to itself as a string and pass the
+          # gate silently — the one corruption a hand edit is most likely to introduce.
           expected=$(python - <<'PY'
-          import json, pathlib
-          print(json.loads(pathlib.Path("tests/public-suite.json").read_text())["collected"])
+          import json, pathlib, sys
+
+          path = pathlib.Path("tests/public-suite.json")
+          try:
+              text = path.read_text()
+          except FileNotFoundError:
+              print(f"::error::{path} does not exist — no published 'collected' figure to compare against.", file=sys.stderr)
+              sys.exit(1)
+          try:
+              data = json.loads(text)
+          except json.JSONDecodeError as exc:
+              print(f"::error::{path} is not valid JSON ({exc}) — no published 'collected' figure to compare against.", file=sys.stderr)
+              sys.exit(1)
+          if "collected" not in data:
+              print(f"::error::{path} has no 'collected' field — no published figure to compare against.", file=sys.stderr)
+              sys.exit(1)
+          value = data["collected"]
+          if isinstance(value, bool) or not isinstance(value, int):
+              print(f"::error::{path}'s 'collected' field is {value!r} ({type(value).__name__}), not an integer — refusing to compare a quoted or non-numeric value as a test count.", file=sys.stderr)
+              sys.exit(1)
+          print(value)
           PY
           )
-          collected=$(python -m pytest --collect-only -q -p no:cacheprovider | tail -1 | awk '{print $1}')
+          # stdout and stderr are captured separately: stderr is printed as-is so nothing pytest
+          # (or a conftest.py hook) writes there is lost, but only stdout is parsed for the count.
+          # A line written to stderr after pytest's own summary must not be mistaken for it.
+          stderr_log=$(mktemp)
+          set +e
+          collect_stdout=$(cd "${MEASURE_DIR}" && python -m pytest --collect-only -q -p no:cacheprovider 2>"${stderr_log}")
+          collect_status=$?
+          set -e
+          collect_stderr=$(cat "${stderr_log}")
+          rm -f "${stderr_log}"
+          if [ -n "${collect_stderr}" ]; then
+            echo "${collect_stderr}" >&2
+          fi
+          if [ "${collect_status}" -eq 5 ]; then
+            echo "${collect_stdout}"
+            echo "::error::pytest collected zero tests in ${MEASURE_DIR} (exit 5, 'no tests ran') — no count to compare against tests/public-suite.json's published $expected. This is not a missing dependency: pytest imported fine and found nothing under tests/, so check that ${MEASURE_DIR} actually holds a tests/ tree — an empty or wrong directory collects nothing rather than failing to import."
+            exit 1
+          fi
+          if [ "${collect_status}" -ne 0 ]; then
+            echo "${collect_stdout}"
+            echo "::error::pytest could not collect the suite in ${MEASURE_DIR} (exit ${collect_status}, a collection error) — no count to compare against tests/public-suite.json's published $expected. This is usually a missing dependency: check pyproject.toml's extras against what the suite under tests/ actually imports, and this job's install step against pyproject.toml's extras."
+            exit 1
+          fi
+          summary_line=$(echo "${collect_stdout}" | tail -1)
+          collected=""
+          if echo "${summary_line}" | grep -qE '^[0-9]+ tests? collected'; then
+            collected=$(echo "${summary_line}" | grep -oE '^[0-9]+')
+          fi
+          if [ -z "${collected}" ]; then
+            echo "${collect_stdout}"
+            echo "::error::pytest exited 0 in ${MEASURE_DIR} but its stdout did not end with a 'N tests collected' summary line (last line: '${summary_line}') — no count could be read to compare against tests/public-suite.json's published $expected."
+            exit 1
+          fi
           echo "published count: $expected"
           echo "collected:       $collected"
           if [ "$expected" != "$collected" ]; then
-            echo "::error::the public suite collects $collected tests, and tests/public-suite.json publishes $expected. If the change is intended, re-measure the number on a freshly built release tree and update the file in the same commit."
+            if [ "${MEASURE_KIND}" = "release-checkout-in-place" ]; then
+              echo "::error::the public suite collects $collected tests in this checkout, and tests/public-suite.json publishes $expected. This checkout was measured in place because it has no tests/fixtures, and that one fact fires for two different shapes: a genuinely stripped public release tree, where this count is real and the mismatch needs fixing here — or a private development checkout whose tests/fixtures was merely deleted by hand, where this count is not a release tree's count at all and must not be published under the public figure. Confirm which one this is before acting on this number: run 'test -f scripts/release-tree-strip.sh' in this checkout — true means a development checkout (that script is release infrastructure and never ships in a release tree), so restore tests/fixtures, or re-measure from a checkout that still has it and let the 'Build the tree to measure' step above build a release tree with it; false means this genuinely is the stripped public tree, so fix the drift and republish from here."  # boundary:allow — explaining the remedy requires naming the fixture directory and the strip script by name, the same as the build step above
+            else
+              echo "::error::the public suite collects $collected tests, and tests/public-suite.json publishes $expected. If the change is intended, re-measure the number on a freshly built release tree and update the file in the same commit."
+            fi
             exit 1
           fi
