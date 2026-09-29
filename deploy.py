@@ -11,6 +11,7 @@ Usage:
     python deploy.py --dry-run                 # Show commands without executing
     python deploy.py --skip-go                 # Skip Go tool installs
     python deploy.py --skip-skills             # Skip Anthropic skill install
+    python deploy.py --skip-system             # Skip Phase 1 system packages (no sudo)
 
 Supported distros: Debian/Ubuntu (apt), RHEL/Fedora (dnf), Arch (pacman),
                    openSUSE (zypper), Alpine (apk)
@@ -129,6 +130,17 @@ ANTHROPIC_SKILLS = [
     "detecting-privilege-escalation-attempts",
     "performing-aws-privilege-escalation-assessment",
 ]
+
+
+def print_manual_install_list():
+    """Print the package/Go-tool/Python-package list for a hands-off Phase 1.
+
+    Shared by the undetected-package-manager path and --skip-system, so the
+    two "here's what wasn't installed" messages can't drift apart.
+    """
+    print("  Packages: nmap, git, go, python3, pip, nodejs, npm, graphviz, hydra, sshpass, aircrack-ng, hcxdumptool, hcxtools, macchanger, hashcat, john, masscan, exploitdb")
+    print("  Go tools: " + ", ".join(GO_TOOLS))
+    print("  Python: " + ", ".join(PIP_PACKAGES))
 
 
 def detect_distro() -> str | None:
@@ -390,6 +402,7 @@ def main():
     parser.add_argument("--skip-go", action="store_true", help="Skip Go tool installs")
     parser.add_argument("--skip-skills", action="store_true", help="Skip Anthropic skill install")
     parser.add_argument("--skip-nmap-vulners", action="store_true", help="Skip nmap-vulners install")
+    parser.add_argument("--skip-system", action="store_true", help="Skip system package install (no sudo/package manager)")
     parser.add_argument("--with-msf", action="store_true", help="Also install Metasploit Framework (1GB+)")
     args = parser.parse_args()
 
@@ -400,20 +413,26 @@ def main():
 
     pkg_mgr = detect_distro()
 
-    if pkg_mgr:
-        print(f"Detected: {pkg_mgr}")
+    if args.skip_system:
+        # Operator/agent has no sudo, or packages are already present — never touch the package manager.
+        print("\n=== Phase 1: System Packages (skipped via --skip-system) ===")
+        print("  Install manually:")
+        print_manual_install_list()
+        if args.with_msf:
+            print("  WARNING: --with-msf requires Phase 1 (system packages) to install Metasploit. Skipping Metasploit.")
     else:
-        print("WARNING: Could not detect package manager. Install manually:")
-        print("  Packages: nmap, git, go, python3, pip, nodejs, npm, graphviz, hydra, sshpass, aircrack-ng, hcxdumptool, hcxtools, macchanger, hashcat, john, masscan, exploitdb")
-        print("  Go tools: " + ", ".join(GO_TOOLS))
-        print("  Python: " + ", ".join(PIP_PACKAGES))
-        sys.exit(1)
+        if pkg_mgr:
+            print(f"Detected: {pkg_mgr}")
+        else:
+            print("WARNING: Could not detect package manager. Install manually:")
+            print_manual_install_list()
+            sys.exit(1)
 
-    print("\n=== Phase 1: System Packages ===")
-    print("  (includes: nmap, git, go, python, node, graphviz, hydra, sshpass, aircrack-ng, hcxdumptool, hcxtools, macchanger, hashcat, john, masscan, exploitdb)")
-    if args.with_msf:
-        print("  (Metasploit requested — this may take several minutes)")
-    install_system_packages(pkg_mgr, args.dry_run, with_msf=args.with_msf)
+        print("\n=== Phase 1: System Packages ===")
+        print("  (includes: nmap, git, go, python, node, graphviz, hydra, sshpass, aircrack-ng, hcxdumptool, hcxtools, macchanger, hashcat, john, masscan, exploitdb)")
+        if args.with_msf:
+            print("  (Metasploit requested — this may take several minutes)")
+        install_system_packages(pkg_mgr, args.dry_run, with_msf=args.with_msf)
 
     if not args.skip_go:
         print("\n=== Phase 2: Go Security Tools ===")
@@ -447,7 +466,9 @@ def main():
         print("  Cracking (pip): hashid")
         print("  Scanning: masscan")
         print("  Exploit lookup: exploitdb")
-        if args.with_msf:
+        if args.with_msf and args.skip_system:
+            print("  Metasploit Framework: skipped (--with-msf needs the Phase 1 system packages)")
+        elif args.with_msf:
             print("  Metasploit Framework: installed")
         else:
             print("  Metasploit: skipped (use --with-msf to include)")

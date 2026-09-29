@@ -393,3 +393,133 @@ class TestPackageMapCompleteness:
                 "exploitdb"]
         missing = [t for t in self.REQUIRED_TOOLS if t not in base]
         assert not missing, f"base_pkgs missing: {missing}"
+
+
+# ---------------------------------------------------------------------------
+# main() — --skip-system flag
+# ---------------------------------------------------------------------------
+
+
+class TestSkipSystemFlag:
+    """Tests for --skip-system: Phase 1 (package manager + sudo) can be skipped."""
+
+    def _patched_phases(self):
+        """Stub out every phase function so main() runs without touching the network or filesystem."""
+        return patch.multiple(
+            deploy,
+            install_system_packages=MagicMock(),
+            install_go_tools=MagicMock(),
+            ensure_go_bin_in_path=MagicMock(),
+            install_python_deps=MagicMock(),
+            install_anthropic_skills=MagicMock(),
+            install_nmap_vulners=MagicMock(),
+            symlink_project_skills=MagicMock(),
+        )
+
+    def test_skip_system_appears_in_help(self, monkeypatch, capsys):
+        """--skip-system is documented in --help, matching the --skip-* flag style."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--help"])
+        with pytest.raises(SystemExit):
+            deploy.main()
+        out = capsys.readouterr().out
+        assert "--skip-system" in out
+
+    def test_skip_system_never_calls_install_system_packages(self, monkeypatch):
+        """--skip-system means Phase 1 never runs — no package manager, no sudo, even if a distro is detected."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--skip-system"])
+        with patch.object(deploy, "detect_distro", return_value="pacman"), self._patched_phases():
+            deploy.main()
+            assert not deploy.install_system_packages.called
+
+    def test_skip_system_prints_manual_install_list(self, monkeypatch, capsys):
+        """When Phase 1 is skipped, the manual package/Go/Python list is printed."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--skip-system"])
+        with patch.object(deploy, "detect_distro", return_value="pacman"), self._patched_phases():
+            deploy.main()
+        out = capsys.readouterr().out
+        assert (
+            "nmap, git, go, python3, pip, nodejs, npm, graphviz, hydra, sshpass, "
+            "aircrack-ng, hcxdumptool, hcxtools, macchanger, hashcat, john, masscan, exploitdb"
+        ) in out
+        assert ", ".join(deploy.GO_TOOLS) in out
+        assert ", ".join(deploy.PIP_PACKAGES) in out
+
+    def test_skip_system_undetectable_pkg_mgr_does_not_exit(self, monkeypatch):
+        """Without --skip-system an undetectable distro exits 1; with it, the run continues."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--skip-system"])
+        with patch.object(deploy, "detect_distro", return_value=None), self._patched_phases():
+            deploy.main()  # must not raise SystemExit
+            assert deploy.install_python_deps.called  # later phases still ran
+
+    def test_skip_system_undetectable_pkg_mgr_prints_manual_list(self, monkeypatch, capsys):
+        """--skip-system with an undetectable distro still prints the manual install list."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--skip-system"])
+        with patch.object(deploy, "detect_distro", return_value=None), self._patched_phases():
+            deploy.main()
+        out = capsys.readouterr().out
+        assert ", ".join(deploy.GO_TOOLS) in out
+        assert ", ".join(deploy.PIP_PACKAGES) in out
+
+    # Intentionally omits --skip-system: pins the pre-existing baseline behavior for
+    # runs that never pass the flag, so it must keep passing unmodified as
+    # --skip-system evolves.
+    def test_without_skip_system_undetectable_pkg_mgr_still_exits(self, monkeypatch, capsys):
+        """Regression: without the flag, an undetectable distro still exits 1 (unchanged behavior)."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py"])
+        with patch.object(deploy, "detect_distro", return_value=None), self._patched_phases():
+            with pytest.raises(SystemExit) as exc_info:
+                deploy.main()
+            assert exc_info.value.code == 1
+            assert not deploy.install_system_packages.called
+        out = capsys.readouterr().out
+        assert "WARNING: Could not detect package manager. Install manually:" in out
+
+    def test_skip_system_with_msf_warns_and_skips_metasploit(self, monkeypatch, capsys):
+        """--skip-system --with-msf warns and skips Metasploit rather than trying pacman/AUR."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--skip-system", "--with-msf"])
+        with patch.object(deploy, "detect_distro", return_value="pacman"), self._patched_phases():
+            deploy.main()
+            assert not deploy.install_system_packages.called
+        out = capsys.readouterr().out
+        # Assert the Phase 1 warning text itself, not just "Metasploit" — that word also
+        # appears in the closing banner, which would satisfy a looser assertion even if
+        # this warning never printed.
+        assert "WARNING: --with-msf requires Phase 1" in out
+        assert "Skipping Metasploit" in out
+
+    def test_skip_system_with_msf_banner_does_not_claim_installed(self, monkeypatch, capsys):
+        """--skip-system --with-msf: the closing banner must not claim Metasploit was installed."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--skip-system", "--with-msf"])
+        with patch.object(deploy, "detect_distro", return_value="pacman"), self._patched_phases():
+            deploy.main()
+        out = capsys.readouterr().out
+        assert "Metasploit Framework: installed" not in out
+        assert "Metasploit Framework: skipped (--with-msf needs the Phase 1 system packages)" in out
+
+    def test_with_msf_without_skip_system_banner_says_installed(self, monkeypatch, capsys):
+        """--with-msf without --skip-system: the closing banner still claims Metasploit was installed."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--with-msf"])
+        with patch.object(deploy, "detect_distro", return_value="pacman"), self._patched_phases():
+            deploy.main()
+        out = capsys.readouterr().out
+        assert "Metasploit Framework: installed" in out
+
+    # The two tests below intentionally omit --skip-system: they pin the pre-existing
+    # baseline behavior for runs that never pass the flag, so they must keep passing
+    # unmodified as --skip-system evolves.
+    def test_dry_run_unchanged_without_skip_system(self, monkeypatch):
+        """--dry-run alone still calls install_system_packages(dry_run=True) — baseline unaffected."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--dry-run"])
+        with patch.object(deploy, "detect_distro", return_value="apt"), self._patched_phases():
+            deploy.main()
+            assert deploy.install_system_packages.called
+            call_args = deploy.install_system_packages.call_args
+            assert call_args[0][1] is True
+
+    def test_dry_run_combined_with_skip_system(self, monkeypatch):
+        """--dry-run --skip-system: Phase 1 is still fully skipped, and later phases still get dry_run=True."""
+        monkeypatch.setattr(sys, "argv", ["deploy.py", "--dry-run", "--skip-system"])
+        with patch.object(deploy, "detect_distro", return_value="apt"), self._patched_phases():
+            deploy.main()
+            assert not deploy.install_system_packages.called
+            assert deploy.install_python_deps.call_args[0][0] is True

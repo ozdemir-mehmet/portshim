@@ -123,7 +123,20 @@
 
 <section class="page-content">
   <div class="container">
-    <h3>v0.5.18 <small>2026-09-28</small></h3>
+    <h3>v0.5.19 <small>2026-09-29</small></h3>
+<h4>Added</h4>
+<ul>
+<li><code>python deploy.py --skip-system</code> runs the deployment without Phase 1: no package manager is invoked and no <code>sudo</code> runs, so a machine whose packages are already installed, or an operator or agent without sudo, can still deploy. The phase prints the manual package, Go tool and Python package list instead, and the run continues into the remaining phases. With the flag, a distribution whose package manager cannot be detected warns and continues, rather than exiting before any other phase ran.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><code>python deploy.py --skip-system --with-msf</code> no longer reports Metasploit as installed. Skipping Phase 1 skips the only step that installs it, so the closing banner now says it was skipped, matching the warning printed at the top of the run. The undetected-package-manager exit is unchanged for a run that does not pass the flag, where a missing package manager is still fatal.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li>The manual install list — packages, Go tools, Python packages — is written once, in <code>print_manual_install_list()</code>, and printed by both the undetected-package-manager path and <code>--skip-system</code>, so the two messages cannot drift apart. The unflagged run prints exactly what it printed before, in the same order.</li>
+</ul>
+<h3>v0.5.18 <small>2026-09-28</small></h3>
 <h4>Fixed</h4>
 <ul>
 <li>The CI check on the published suite's size now runs. It could not measure the figure it asserted: the project declared no build system and no package set, so <code>pip install</code> failed in the backend's discovery before a single test was collected, and the strip step the count depends on lived inside the release pipeline's own script, which the job never invoked. The job installs <code>.[core,dev,report]</code>, builds a release tree the way this repository's pipeline builds one when the site fixtures are present, measures in place when they are not, and names each failure rather than stopping on an unbound variable.</li>
@@ -388,7 +401,7 @@
       <a href="../index.html#quickstart">Quick Start</a>
       <a href="../index.html#faq">FAQ</a>
     </div>
-    <p>PortShim v0.5.18 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
+    <p>PortShim v0.5.19 — Authorised security testing only. All models are Apache 2.0 or permissive licences.</p>
     <p style="margin-top:4px;">Built with llama.cpp · Powered by Vulkan · Backed by benchmarks</p>
   </div>
 </footer>

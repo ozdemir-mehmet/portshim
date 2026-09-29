@@ -2,6 +2,17 @@
 
 All notable changes to PortShim are documented here.
 
+## [v0.5.19] — 2026-09-29
+
+### Added
+- `python deploy.py --skip-system` runs the deployment without Phase 1: no package manager is invoked and no `sudo` runs, so a machine whose packages are already installed, or an operator or agent without sudo, can still deploy. The phase prints the manual package, Go tool and Python package list instead, and the run continues into the remaining phases. With the flag, a distribution whose package manager cannot be detected warns and continues, rather than exiting before any other phase ran.
+
+### Fixed
+- `python deploy.py --skip-system --with-msf` no longer reports Metasploit as installed. Skipping Phase 1 skips the only step that installs it, so the closing banner now says it was skipped, matching the warning printed at the top of the run. The undetected-package-manager exit is unchanged for a run that does not pass the flag, where a missing package manager is still fatal.
+
+### Changed
+- The manual install list — packages, Go tools, Python packages — is written once, in `print_manual_install_list()`, and printed by both the undetected-package-manager path and `--skip-system`, so the two messages cannot drift apart. The unflagged run prints exactly what it printed before, in the same order.
+
 ## [v0.5.18] — 2026-09-28
 
 ### Fixed
